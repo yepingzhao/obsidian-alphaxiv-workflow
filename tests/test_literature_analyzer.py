@@ -7,6 +7,8 @@ import sys
 from unittest.mock import patch, MagicMock
 
 import pytest
+import re
+import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 from literature_analyzer import (
@@ -628,3 +630,76 @@ class TestBuildSynthesisNote:
 
         content, filepath = build_synthesis_note('Test', papers, 'topic', str(tmp_path))
         assert 'Pending Paper' in content
+
+
+# ------------------------------------------------------------------
+# Integration Tests
+# ------------------------------------------------------------------
+
+
+class TestIntegration:
+    """End-to-end test: scan -> search -> extract -> build prompt -> build note."""
+
+    def test_e2e_topic_workflow(self, tmp_path, monkeypatch):
+        refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
+        output_dir = os.path.join(str(tmp_path), '200 Areas', '深度学习')
+
+        write_note(os.path.join(refs, 'paper_tier1.md'), STRUCTURED_NOTE)
+        write_note(os.path.join(refs, 'paper_tier2.md'), OVERVIEW_ONLY_NOTE)
+        write_note(os.path.join(refs, 'paper_tier3.md'), ABSTRACT_ONLY_NOTE)
+
+        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+                           os.path.relpath(refs, str(tmp_path)))
+        monkeypatch.setattr('literature_analyzer.VAULT_OUTPUT_AREA',
+                           os.path.relpath(output_dir, str(tmp_path)))
+
+        # Search
+        results = find_notes_by_topic('3D', str(tmp_path))
+        assert len(results) >= 1  # At least STRUCTURED_NOTE matches "3D"
+
+        # Extract summaries
+        for p in results:
+            p['summary'] = extract_paper_summary(p['filepath'])
+        assert any('novel method' in p.get('summary', '') for p in results)
+
+        # Build prompt
+        prompt = build_synthesis_prompt('Test Topic', results, 'topic')
+        assert len(prompt) > 500
+        assert '方法分类与对比' in prompt
+
+        # Build note scaffold
+        content, filepath = build_synthesis_note('Test Topic', results, 'topic', str(tmp_path))
+        assert os.path.basename(filepath).startswith('Test Topic')
+        assert '文献综述' in filepath
+        assert '<!-- LLM_SYNTHESIS_PLACEHOLDER -->' in content
+
+    def test_synthesis_note_valid_markdown(self, tmp_path, monkeypatch):
+        refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
+        output_dir = os.path.join(str(tmp_path), '200 Areas', '深度学习')
+        write_note(os.path.join(refs, 'p1.md'), FULL_NOTE)
+        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+                           os.path.relpath(refs, str(tmp_path)))
+        monkeypatch.setattr('literature_analyzer.VAULT_OUTPUT_AREA',
+                           os.path.relpath(output_dir, str(tmp_path)))
+
+        papers = find_notes_by_topic('attention', str(tmp_path))
+        for p in papers:
+            p['summary'] = extract_paper_summary(p['filepath'])
+        content, filepath = build_synthesis_note('Test', papers, 'topic', str(tmp_path))
+
+        # Valid YAML frontmatter
+        fm_match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+        assert fm_match is not None
+        fm = yaml.safe_load(fm_match.group(1))
+        assert 'title' in fm
+        assert 'tags' in fm
+
+        # Exactly one H1
+        h1s = [l for l in content.split('\n') if l.startswith('# ') and not l.startswith('## ')]
+        assert len(h1s) == 1
+
+        # Required H2 sections present
+        h2s = [l for l in content.split('\n') if l.startswith('## ')]
+        assert any('论文列表' in h for h in h2s)
+        assert any('论文分析' in h for h in h2s)
+        assert any('AI 综述生成' in h for h in h2s)
