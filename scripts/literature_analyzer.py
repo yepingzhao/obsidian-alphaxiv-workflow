@@ -114,49 +114,81 @@ def find_notes_by_author(author: str, vault_path: str) -> list:
     ]
 
 
+EXTRACTION_MAX_CHARS = 2400  # ~600 tokens for LLM input
+
+
+def _extract_section(content: str, heading: str, max_chars: int = 800) -> str:
+    """Extract plain text from a markdown section by heading name. Returns '' if not found."""
+    pattern = rf'^#{{2,3}}\s*{re.escape(heading)}\s*\n(.*?)(?=\n#{{2,3}}\s|\n---|\Z)'
+    match = re.search(pattern, content, re.DOTALL | re.MULTILINE)
+    if not match:
+        return ''
+    text = match.group(1).strip()
+    text = re.sub(r'^> .*?\n', '', text, flags=re.MULTILINE)
+    text = re.sub(r'\n\*[^*]+\*$', '', text)
+    return text[:max_chars]
+
+
+def _has_real_content(text: str) -> bool:
+    """Check if extracted text has substantive content (not pending/placeholder)."""
+    if not text or len(text) < 30:
+        return False
+    placeholders = ['正在生成中', 'blog_status', '暂无', '暂不可用']
+    return not any(p in text for p in placeholders)
+
+
 def extract_paper_summary(filepath: str) -> str:
-    """Extract abstract and key insights from a paper note."""
+    """Extract structured paper data for LLM synthesis input.
+
+    Three-tier priority with ~400-600 token budget:
+      Tier 1: 核心总结 (<=3 sentences) + 关键洞察 (3-5 bullet points)
+      Tier 2: AI 综述 (中文) first 2 paragraphs (<=400 chars)
+      Tier 3: English abstract (<=300 chars)
+
+    blog_status: pending papers get warning marker, included with abstract.
+    """
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
     except Exception:
         return ''
-    parts = []
-    has_blog_pending = 'blog_status: pending' in content
 
-    # Extract abstract
-    abstract_match = re.search(r'## 摘要\s*\n\n(.*?)(?:\n---|\n##)', content, re.DOTALL)
-    abstract_text = abstract_match.group(1).strip()[:500] if abstract_match else ''
+    has_blog_pending = re.search(r'blog_status:\s*"?pending"?', content) is not None
 
-    if abstract_text:
-        parts.append(abstract_text)
+    # Tier 1: 核心总结 + 关键洞察 (structured AI summary)
+    core_summary = _extract_section(content, '核心总结', max_chars=400)
+    key_insights = _extract_section(content, '关键洞察', max_chars=600)
 
-    # Extract key insights from AI summary (### 要点, Chinese)
-    insights_match = re.search(r'### 要点\s*\n(.*?)(?:\n###|\n##)', content, re.DOTALL)
-    if insights_match:
-        parts.append('**关键洞察**:\n' + insights_match.group(1).strip()[:500])
-    else:
-        # Fallback: extract from Chinese overview section
-        zh_match = re.search(
-            r'## AI 综述 \(中文\)\s*\n\n(.*?)(?:\n---|\n##)', content, re.DOTALL)
-        zh_text = zh_match.group(1).strip() if zh_match else ''
-        has_real_zh = (zh_text and '正在生成中' not in zh_text
-                       and len(zh_text) > 50)
-        if has_real_zh:
-            # Use first meaningful paragraph from Chinese overview
-            zh_para = re.sub(r'> .*?\n', '', zh_text).strip()[:400]
-            parts.append('**关键洞察**:\n' + zh_para)
-        elif has_blog_pending and abstract_text:
-            parts.append(
-                '**关键洞察**: ⏳ 中文综述生成中，请运行 `backfill-overviews` 获取。\n\n'
-                f'*英文摘要参考*: {abstract_text[:300]}')
-        elif abstract_text:
-            parts.append(
-                '**关键洞察**: 暂无结构化摘要。\n\n'
-                f'*摘要*: {abstract_text[:300]}')
-        else:
-            parts.append('**关键洞察**: 暂不可用。')
-    return '\n\n'.join(parts)
+    if _has_real_content(core_summary) or _has_real_content(key_insights):
+        parts = []
+        if _has_real_content(core_summary):
+            parts.append(f'**核心贡献**: {core_summary}')
+        if _has_real_content(key_insights):
+            parts.append(f'**关键洞察**:\n{key_insights}')
+        result = '\n\n'.join(parts)
+        if has_blog_pending:
+            result = '⚠️ *AI 综述尚未生成*\n\n' + result
+        return result[:EXTRACTION_MAX_CHARS]
+
+    # Tier 2: AI 综述 (Chinese overview) first 2 paragraphs
+    zh_overview = _extract_section(content, 'AI 综述 (中文)', max_chars=800)
+    if _has_real_content(zh_overview):
+        paragraphs = [p.strip() for p in zh_overview.split('\n\n') if p.strip()]
+        first_two = '\n\n'.join(paragraphs[:2])
+        result = first_two[:400]
+        if has_blog_pending:
+            result = '⚠️ *AI 综述尚未生成*\n\n' + result
+        return result[:EXTRACTION_MAX_CHARS]
+
+    # Tier 3: English abstract
+    abstract = _extract_section(content, '摘要', max_chars=500)
+    if _has_real_content(abstract):
+        result = f'**摘要**: {abstract[:300]}'
+        if has_blog_pending:
+            result = '⚠️ *AI 综述尚未生成，仅英文摘要可用*\n\n' + result
+        return result[:EXTRACTION_MAX_CHARS]
+
+    return '⚠️ *无可用摘要信息*'
 
 
 def build_synthesis_note(topic: str, papers: list, dimension: str, vault_path: str) -> tuple:
