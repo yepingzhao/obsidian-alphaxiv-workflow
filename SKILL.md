@@ -28,8 +28,8 @@ Rationale:
 | Command | Pipeline | Purpose |
 |---------|----------|---------|
 | `import "<query>"` | Gate 1 -> 2 -> 3 | Search, fetch, and save paper(s) to vault |
-| `analyze "topic"` | Gate 4 | Synthesize saved papers by topic |
-| `analyze author "name"` | Gate 4 | Synthesize saved papers by author |
+| `analyze "topic"` | Gate 4 | LLM five-chapter synthesis: search, extract, generate, iterate |
+| `analyze author "name"` | Gate 4 | LLM five-chapter author analysis: search, extract, generate, iterate |
 | `backfill-overviews` | Backfill Pipeline | Fetch existing overviews + trigger new generation via Playwright |
 
 ## Import Pipeline
@@ -49,10 +49,20 @@ User input -> search-disambiguate -> build-note (auto-gen) -> validate-import
 ## Analyze Pipeline
 
 ```
-User query -> literature-synthesis
+User query -> literature-synthesis (LLM-driven)
+
+1. Weighted search (title → tags → content) with relevance ranking
+2. Three-tier content extraction per paper
+3. LLM generates five-chapter synthesis inline
+4. Natural language iteration (up to 3 rounds)
+5. Save with wikilink citations
 ```
 
-**REQUIRED SUB-SKILL:** Load `skills/literature-synthesis/SKILL.md` -- Gate 4: Search vault papers by topic/author, generate synthesis note.
+**REQUIRED SUB-SKILL:** Load `skills/literature-synthesis/SKILL.md` -- Gate 4: Search vault papers by topic/author with relevance scoring. Generate five-chapter LLM synthesis with iterative refinement.
+
+**Output chapters:** 方法分类与对比 → 演进脉络 → 共识与矛盾 → 空白与机会 → 关键论文推荐
+
+**Quick mode:** `analyze "topic" --quick` skips confirmation & iteration.
 
 ## Overview Backfill Pipeline
 
