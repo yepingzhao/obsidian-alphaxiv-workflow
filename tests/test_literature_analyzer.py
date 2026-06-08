@@ -531,7 +531,7 @@ class TestBuildSynthesisPrompt:
 # ──────────────────────────────────────────────────────────────────
 
 class TestBuildSynthesisNote:
-    def test_builds_topic_synthesis(self, tmp_path):
+    def test_builds_topic_synthesis_scaffold(self, tmp_path):
         papers = [{
             'filepath': os.path.join(str(tmp_path), 'test.md'),
             'title': 'Attention Is All You Need',
@@ -541,6 +541,8 @@ class TestBuildSynthesisNote:
             'ccf': 'A',
             'presentation_type': '',
             'published_date': '2017-12-01',
+            'summary': 'Core contribution: self-attention mechanism.',
+            'relevance': 'high',
         }]
         write_note(papers[0]['filepath'], FULL_NOTE)
 
@@ -548,11 +550,12 @@ class TestBuildSynthesisNote:
         assert '文献综述' in filepath
         assert 'Transformer' in content
         assert 'Attention Is All You Need' in content
-        assert 'NeurIPS 2017' in content
-        assert 'CCF-A' in content
-        assert '交叉引用与演进' in content
+        assert 'LLM_SYNTHESIS_PLACEHOLDER' in content
+        assert '## 论文列表' in content
+        assert '## 论文分析' in content
+        assert '## AI 综述生成' in content
 
-    def test_builds_author_synthesis(self, tmp_path):
+    def test_builds_author_synthesis_scaffold(self, tmp_path):
         papers = [{
             'filepath': os.path.join(str(tmp_path), 'test.md'),
             'title': 'Attention Is All You Need',
@@ -562,6 +565,8 @@ class TestBuildSynthesisNote:
             'ccf': '',
             'presentation_type': '',
             'published_date': '',
+            'summary': 'Self-attention mechanism.',
+            'relevance': 'high',
         }]
         write_note(papers[0]['filepath'], FULL_NOTE)
 
@@ -575,6 +580,7 @@ class TestBuildSynthesisNote:
             'title': 'Test', 'arxiv_id': '1234.56789',
             'authors': [], 'published_venue': '', 'ccf': '',
             'presentation_type': '', 'published_date': '',
+            'summary': 'S', 'relevance': 'high',
         }]
         write_note(papers[0]['filepath'], '---\ntitle: "Test"\n---\n# Test')
 
@@ -584,13 +590,39 @@ class TestBuildSynthesisNote:
         assert '"' not in os.path.basename(filepath)
         assert '?' not in os.path.basename(filepath)
 
-    def test_handles_pending_paper(self, tmp_path):
+    def test_generated_by_notice(self, tmp_path):
+        papers = [{
+            'filepath': os.path.join(str(tmp_path), 'test.md'),
+            'title': 'T', 'arxiv_id': '1',
+            'authors': [], 'published_venue': '', 'ccf': '',
+            'presentation_type': '', 'published_date': '',
+            'summary': 'S', 'relevance': 'high',
+        }]
+        write_note(papers[0]['filepath'], '---\ntitle: "T"\n---\n# T')
+        content, _ = build_synthesis_note('Test', papers, 'topic', str(tmp_path))
+        assert 'alphaxiv-to-obsidian' in content
+
+    def test_includes_relevance_label(self, tmp_path):
+        papers = [{
+            'filepath': os.path.join(str(tmp_path), 'test.md'),
+            'title': 'T', 'arxiv_id': '1',
+            'authors': [], 'published_venue': '', 'ccf': '',
+            'presentation_type': '', 'published_date': '',
+            'summary': 'S', 'relevance': 'low',
+        }]
+        write_note(papers[0]['filepath'], '---\ntitle: "T"\n---\n# T')
+        content, _ = build_synthesis_note('Test', papers, 'topic', str(tmp_path))
+        assert '弱相关' in content
+
+    def test_handles_pending_paper_scaffold(self, tmp_path):
         papers = [{
             'filepath': os.path.join(str(tmp_path), 'test.md'),
             'title': 'Pending Paper', 'arxiv_id': '2301.12345',
             'authors': ['Smith, John'],
             'published_venue': '', 'ccf': '', 'presentation_type': '',
             'published_date': '',
+            'summary': 'A pending paper abstract.',
+            'relevance': 'medium',
         }]
         write_note(papers[0]['filepath'], PENDING_NOTE)
 

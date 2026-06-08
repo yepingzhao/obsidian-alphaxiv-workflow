@@ -277,7 +277,11 @@ def build_synthesis_prompt(topic: str, papers: list, dimension: str) -> str:
 
 
 def build_synthesis_note(topic: str, papers: list, dimension: str, vault_path: str) -> tuple:
-    """Build a literature synthesis note. Returns (content, filepath)."""
+    """Build a literature synthesis note scaffold with LLM placeholder.
+
+    Returns (content, filepath). The actual five-chapter synthesis is generated
+    by Claude inline using the prompt from build_synthesis_prompt().
+    """
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
     clean_topic = re.sub(r'[\\/:*?"<>|]', '', topic)[:60]
     output_dir = os.path.join(vault_path, VAULT_OUTPUT_AREA)
@@ -286,51 +290,57 @@ def build_synthesis_note(topic: str, papers: list, dimension: str, vault_path: s
     os.makedirs(output_dir, exist_ok=True)
     filepath = os.path.join(output_dir, filename)
 
+    # Paper list with wikilinks
     paper_refs = '\n'.join(
         f'- [[{os.path.splitext(os.path.basename(p["filepath"]))[0]}]]'
         for p in papers
     )
+
+    # Source links (frontmatter, up to 10 papers)
     source_links = '[' + ', '.join(
         f'"[[{os.path.splitext(os.path.basename(p["filepath"]))[0]}]]"'
-        for p in papers[:5]
+        for p in papers[:10]
     ) + ']'
 
+    # Paper details (title + meta; summary handled by LLM synthesis)
     paper_details = []
     for p in papers:
-        summary = extract_paper_summary(p['filepath'])
-        # Build publication info line
-        pub_badges = []
-        if p.get('published_venue'):
-            pub_badges.append(p['published_venue'])
-        if p.get('ccf'):
-            pub_badges.append(f'CCF-{p["ccf"]}')
-        if p.get('presentation_type'):
-            pub_badges.append(p['presentation_type'])
-        pub_info = ' | '.join(pub_badges) if pub_badges else ''
-        # Format authors (up to 5, first author bold)
         authors = p.get('authors', [])
-        if authors:
-            author_str = ', '.join(authors[:5])
-            if len(authors) > 5:
-                author_str += f' et al. ({len(authors)} authors)'
-        else:
+        author_str = ', '.join(authors[:3])
+        if len(authors) > 3:
+            author_str += f' et al. ({len(authors)} authors)'
+        elif not author_str:
             author_str = 'TBD'
-        # Assemble paper detail block
+
         detail = f'### {p["title"]}\n\n'
-        if pub_info:
-            detail += f'> 🏷️ {pub_info}\n\n'
-        detail += (f'- **arXiv**: [{p["arxiv_id"]}](https://arxiv.org/abs/{p["arxiv_id"]})\n'
-                   f'- **作者**: {author_str}\n')
+        detail += f'- **arXiv**: [{p["arxiv_id"]}](https://arxiv.org/abs/{p["arxiv_id"]})\n'
+        detail += f'- **作者**: {author_str}\n'
+        if p.get('published_venue'):
+            detail += f'- **发表**: {p["published_venue"]}'
+            if p.get('ccf'):
+                detail += f' (CCF-{p["ccf"]})'
+            detail += '\n'
         if p.get('published_date'):
             detail += f'- **日期**: {p["published_date"]}\n'
-        detail += f'\n{summary}\n'
+        if p.get('relevance'):
+            relevance_label = {
+                'high': '高相关 (标题匹配)',
+                'medium': '中相关 (标签匹配)',
+                'low': '弱相关 (内容匹配)'
+            }
+            detail += f'- **相关度**: {relevance_label.get(p["relevance"], p["relevance"])}\n'
+        detail += f'\n{p.get("summary", "⚠️ 无摘要")}\n'
         paper_details.append(detail)
 
-    dimension_label = f'汇总了学者 **{topic}** 的相关论文' if dimension == 'author' else f'围绕主题 **{topic}** 检索相关论文'
+    dimension_label = (
+        f'汇总了学者 **{topic}** 的相关论文'
+        if dimension == 'author'
+        else f'围绕主题 **{topic}** 检索相关论文'
+    )
 
     note = f'''---
 title: "{clean_topic} - {suffix}"
-tags: [literature-review, deep-learning, area]
+tags: [literature-review, area]
 created: "{now_str}"
 source: {source_links}
 ---
@@ -339,7 +349,7 @@ source: {source_links}
 
 ## 概述
 
-本笔记由 AlphaXiv 文献分析工具自动生成，{dimension_label}。
+本笔记由 AlphaXiv 文献分析工具生成，{dimension_label}。
 
 共找到 {len(papers)} 篇相关论文。
 
@@ -347,13 +357,15 @@ source: {source_links}
 
 {paper_refs}
 
+## AI 综述生成
+
+> 以下五章综述通过 LLM 生成。
+
+<!-- LLM_SYNTHESIS_PLACEHOLDER -->
+
 ## 论文分析
 
-{'\n'.join(paper_details)}
-
-## 交叉引用与演进
-
-*此部分建议手动补充论文之间的演进关系和对比分析。*
+{chr(10).join(paper_details)}
 
 ---
 
