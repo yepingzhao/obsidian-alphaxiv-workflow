@@ -1,6 +1,7 @@
 ---
 name: obsidian-alphaxiv-workflow
 description: Use when user wants to save a paper to Obsidian, mentions AlphaXiv or arXiv papers, paper blog, literature notes, or asks to capture paper summaries and overviews. Also use when user wants to analyze or synthesize saved papers by topic or author.
+argument-hint: 'import "query" | analyze "topic" | analyze author "name" | backfill-overviews'
 ---
 
 # AlphaXiv to Obsidian
