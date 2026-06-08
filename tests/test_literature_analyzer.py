@@ -14,6 +14,7 @@ from literature_analyzer import (
     find_notes_by_topic,
     find_notes_by_author,
     extract_paper_summary,
+    build_synthesis_prompt,
     build_synthesis_note,
 )
 
@@ -476,6 +477,53 @@ class TestExtractPaperSummary:
         write_note(fpath, STRUCTURED_NOTE)
         result = extract_paper_summary(fpath)
         assert len(result) <= 2500, f'Extracted {len(result)} chars, expected <= 2500'
+
+
+# ──────────────────────────────────────────────────────────────────
+# build_synthesis_prompt
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestBuildSynthesisPrompt:
+    def test_includes_all_papers(self):
+        papers = [
+            {'title': 'Paper A', 'arxiv_id': '1111.00001', 'authors': ['A'], 'published_date': '2024', 'summary': 'Summary A', 'ccf': 'A', 'published_venue': 'NeurIPS 2024', 'relevance': 'high'},
+            {'title': 'Paper B', 'arxiv_id': '2222.00002', 'authors': ['B'], 'published_date': '2023', 'summary': 'Summary B', 'ccf': '', 'published_venue': '', 'relevance': 'medium'},
+        ]
+        prompt = build_synthesis_prompt('MyTopic', papers, 'topic')
+        assert 'MyTopic' in prompt
+        assert 'Paper A' in prompt
+        assert 'Paper B' in prompt
+        assert '1111.00001' in prompt
+        assert '2222.00002' in prompt
+        assert 'Summary A' in prompt
+        assert 'Summary B' in prompt
+
+    def test_includes_five_chapter_headings(self):
+        papers = [{'title': 'T', 'arxiv_id': '1', 'authors': ['A'], 'published_date': '', 'summary': 'S', 'ccf': '', 'published_venue': '', 'relevance': 'high'}]
+        prompt = build_synthesis_prompt('Test', papers, 'topic')
+        assert '方法分类与对比' in prompt
+        assert '演进脉络' in prompt
+        assert '共识与矛盾' in prompt
+        assert '空白与机会' in prompt
+        assert '关键论文推荐' in prompt
+
+    def test_includes_output_format_constraints(self):
+        papers = [{'title': 'T', 'arxiv_id': '1', 'authors': ['A'], 'published_date': '', 'summary': 'S', 'ccf': '', 'published_venue': '', 'relevance': 'high'}]
+        prompt = build_synthesis_prompt('Test', papers, 'topic')
+        assert 'wikilink' in prompt or '[[' in prompt
+        assert '中文' in prompt
+
+    def test_handles_empty_summary_paper(self):
+        papers = [{'title': 'Empty', 'arxiv_id': '1', 'authors': ['X'], 'published_date': '', 'summary': '⚠️ *无可用摘要信息*', 'ccf': '', 'published_venue': '', 'relevance': 'low'}]
+        prompt = build_synthesis_prompt('Test', papers, 'topic')
+        assert 'Empty' in prompt
+        assert '⚠️' in prompt
+
+    def test_author_mode_uses_different_instructions(self):
+        papers = [{'title': 'T', 'arxiv_id': '1', 'authors': ['Vaswani, Ashish'], 'published_date': '', 'summary': 'S', 'ccf': '', 'published_venue': '', 'relevance': 'high'}]
+        prompt = build_synthesis_prompt('Ashish Vaswani', papers, 'author')
+        assert '学者' in prompt or 'author' in prompt.lower()
 
 
 # ──────────────────────────────────────────────────────────────────

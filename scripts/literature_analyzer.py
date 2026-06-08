@@ -191,6 +191,91 @@ def extract_paper_summary(filepath: str) -> str:
     return '⚠️ *无可用摘要信息*'
 
 
+def _format_paper_entry(p: dict, index: int) -> str:
+    """Format a single paper for the LLM prompt."""
+    badges = []
+    if p.get('published_venue'):
+        badges.append(p['published_venue'])
+    if p.get('ccf'):
+        badges.append(f'CCF-{p["ccf"]}')
+    if p.get('relevance'):
+        badges.append(f'相关度: {p["relevance"]}')
+
+    authors = p.get('authors', [])
+    author_str = ', '.join(authors[:3])
+    if len(authors) > 3:
+        author_str += f' et al. ({len(authors)} 位作者)'
+
+    lines = [
+        f'### {index}. {p["title"]}',
+        f'- **arXiv**: {p["arxiv_id"]}',
+        f'- **作者**: {author_str}',
+    ]
+    if p.get('published_date'):
+        lines.append(f'- **日期**: {p["published_date"]}')
+    if badges:
+        lines.append(f'- **标签**: {" | ".join(badges)}')
+    lines.append('')
+    lines.append(p.get('summary', '⚠️ *无摘要*'))
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def build_synthesis_prompt(topic: str, papers: list, dimension: str) -> str:
+    """Build the LLM prompt for five-chapter literature synthesis.
+
+    Returns the complete prompt string ready for Claude.
+    """
+    is_author = dimension == 'author'
+
+    paper_entries = '\n'.join(
+        _format_paper_entry(p, i) for i, p in enumerate(papers, 1)
+    )
+
+    if is_author:
+        intro = f'以下是学者 **{topic}** 的 {len(papers)} 篇论文的结构化摘要。'
+    else:
+        intro = f'以下是主题 **{topic}** 相关的 {len(papers)} 篇论文的结构化摘要。'
+
+    prompt = f'''{intro}请基于这些论文撰写一份学术文献综述。
+
+{paper_entries}
+
+## 写作要求
+
+请生成以下五个章节。每章 2-5 段，中文输出，专业术语保留英文。
+
+### 一、方法分类与对比
+按技术路线或子领域将论文分组。每组列出代表论文（使用 `[[论文标题]]` wikilink），对比优缺点。
+**重要**: 如果论文分属完全不同的子领域，不要牵强统一分组。承认差异，分为「子领域 A（X篇）」「子领域 B（Y篇）」分别分析。
+
+### 二、演进脉络
+按时间线梳理关键突破节点，标注论文之间的承继关系（谁改进了谁）。
+无法确定时间或承继关系的论文，归入「独立工作」段落。
+
+### 三、共识与矛盾
+列出社区已达成共识的结论（被多篇论文独立验证）和仍存在的争议或矛盾。
+如果该领域尚未形成明确共识，请如实声明。
+
+### 四、空白与机会
+识别论文中明确提出的未解决问题，以及你从论文空白中推断的潜在研究方向。
+**重要**: 区分「论文明确提出」（标注出处）和「综述推断」两个来源。
+
+### 五、关键论文推荐
+推荐 3-5 篇必读论文，说明每篇的核心贡献和推荐理由。
+允许多选 1 篇不在上述列表中的重要相关论文（标注为「扩展阅读」）。
+
+## 格式约束
+
+- 所有论文引用使用 `[[论文完整标题]]` wikilink 格式
+- 中文撰写，专业术语保留英文原文
+- 每篇被引用的论文至少出现一次 wikilink 引用
+- 不确定的信息标注「推测」或「待验证」
+'''
+
+    return prompt
+
+
 def build_synthesis_note(topic: str, papers: list, dimension: str, vault_path: str) -> tuple:
     """Build a literature synthesis note. Returns (content, filepath)."""
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
