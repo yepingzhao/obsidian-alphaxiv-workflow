@@ -49,14 +49,60 @@ def _scan_vault_papers(vault_path: str) -> list:
     return results
 
 
+def _read_body_content(filepath: str) -> str:
+    """Read body content of a note (after frontmatter) for keyword matching."""
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        fm_end = content.find('---', 4)
+        if fm_end == -1:
+            return content.lower()
+        return content[fm_end + 3:].lower()
+    except Exception:
+        return ''
+
+
 def find_notes_by_topic(topic: str, vault_path: str) -> list:
-    """Search vault paper notes by topic (matches title, tags)."""
+    """Search vault paper notes by topic with weighted relevance.
+
+    Relevance levels:
+        high   — keyword matches title
+        medium — keyword matches tags
+        low    — keyword matches abstract or AI overview body
+
+    Results are sorted by relevance (high → medium → low).
+    """
     keywords = topic.lower().split()
-    return [
-        p for p in _scan_vault_papers(vault_path)
-        if any(kw in p['title'].lower() for kw in keywords)
-        or any(kw in t.lower() for t in p['tags'] for kw in keywords)
-    ]
+    all_papers = _scan_vault_papers(vault_path)
+
+    scored = []
+    for p in all_papers:
+        title_lower = p['title'].lower()
+        tags_lower = [t.lower() for t in p['tags']]
+
+        for kw in keywords:
+            if kw in title_lower:
+                p['relevance'] = 'high'
+                p['_match_kw'] = kw
+                scored.append(p)
+                break
+            elif any(kw in t for t in tags_lower):
+                p['relevance'] = 'medium'
+                p['_match_kw'] = kw
+                scored.append(p)
+                break
+            else:
+                body = _read_body_content(p['filepath'])
+                if kw in body:
+                    p['relevance'] = 'low'
+                    p['_match_kw'] = kw
+                    scored.append(p)
+                    break
+
+    relevance_order = {'high': 0, 'medium': 1, 'low': 2}
+    scored.sort(key=lambda x: relevance_order.get(x.get('relevance', 'low'), 2))
+
+    return scored
 
 
 def find_notes_by_author(author: str, vault_path: str) -> list:

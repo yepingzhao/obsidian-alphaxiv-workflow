@@ -100,6 +100,34 @@ This is a pending paper abstract.
 *Fetched from AlphaXiv*
 """
 
+SUMMARY_NOTE = """---
+title: "Ego Summary Paper"
+arxiv_id: "2301.99999"
+tags: [paper, alphaxiv, computer-vision]
+authors:
+  - Doe, Jane
+---
+# Ego Summary Paper
+
+## AI 摘要
+
+### 核心总结
+This paper uses egocentric video for 3D scene understanding.
+"""
+
+GHOST_NOTE = """---
+title: "Ghost Title"
+arxiv_id: "2301.88888"
+tags: [paper, alphaxiv, nlp]
+authors:
+  - Ghost, Author
+---
+# Ghost Title
+
+## 摘要
+A paper about unrelated natural language processing topics.
+"""
+
 
 def write_note(path: str, content: str):
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -193,6 +221,43 @@ class TestFindNotesByTopic:
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_topic('quantum attention', str(tmp_path))
         assert len(results) == 1
+
+    def test_matches_abstract_content(self, tmp_path, monkeypatch):
+        refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
+        write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
+        write_note(os.path.join(refs, 'paper2.md'), SUMMARY_NOTE)
+        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+                           os.path.relpath(refs, str(tmp_path)))
+        results = find_notes_by_topic('egocentric', str(tmp_path))
+        assert len(results) == 1
+        assert results[0]['arxiv_id'] == '2301.99999'
+
+    def test_result_has_relevance_scores(self, tmp_path, monkeypatch):
+        refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
+        write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
+        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+                           os.path.relpath(refs, str(tmp_path)))
+        results = find_notes_by_topic('attention', str(tmp_path))
+        assert len(results) == 1
+        assert 'relevance' in results[0]
+        assert results[0]['relevance'] == 'high'
+
+    def test_relevance_medium_for_tags_only(self, tmp_path, monkeypatch):
+        refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
+        write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
+        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+                           os.path.relpath(refs, str(tmp_path)))
+        results = find_notes_by_topic('transformer', str(tmp_path))
+        assert len(results) == 1
+        assert results[0]['relevance'] == 'medium'
+
+    def test_ghost_keyword_no_match(self, tmp_path, monkeypatch):
+        refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
+        write_note(os.path.join(refs, 'paper1.md'), GHOST_NOTE)
+        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+                           os.path.relpath(refs, str(tmp_path)))
+        results = find_notes_by_topic('nonexistent_keyword_xyz', str(tmp_path))
+        assert results == []
 
 
 # ──────────────────────────────────────────────────────────────────
