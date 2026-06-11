@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alphaxiv-workflow"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "alphaxiv_cat",
+    "pyyaml",
+    "prettytable",
+]
+
+[project.optional-dependencies]
+batch = ["arxiv"]
+dev = ["pytest", "pytest-asyncio"]
+
+[tool.setuptools.packages.find]
+where = ["."]
