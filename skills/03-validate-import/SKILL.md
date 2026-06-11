@@ -1,5 +1,5 @@
 ---
-name: validate-import
+name: 03-validate-import
 description: Use when a newly saved paper note in Obsidian needs frontmatter validation, intelligent tag generation, and duplicate detection after import.
 ---
 
@@ -7,7 +7,7 @@ description: Use when a newly saved paper note in Obsidian needs frontmatter val
 
 Post-save validation and enrichment of imported paper notes.
 
-All commands run from the `scripts/` directory: `cd scripts`
+All commands run from the project root. Ensure `pip install -e .` has been run first.
 
 ## Process
 
@@ -16,7 +16,7 @@ All commands run from the `scripts/` directory: `cd scripts`
 ```bash
 python -c "
 
-from validator import validate_frontmatter
+from alphaxiv_workflow.validate import validate_frontmatter
 result = validate_frontmatter('FILEPATH')
 print(result)
 "
@@ -36,7 +36,7 @@ print(result)
 ```bash
 python -c "
 
-from validator import check_heading_hierarchy
+from alphaxiv_workflow.validate import check_heading_hierarchy
 result = check_heading_hierarchy('FILEPATH')
 print(result)
 "
@@ -57,7 +57,7 @@ print(result)
 ```bash
 python -c "
 
-from validator import check_duplicates
+from alphaxiv_workflow.validate import check_duplicates
 dups = check_duplicates('ARXIV_ID', 'VAULT_PATH')
 "
 ```
@@ -66,7 +66,7 @@ If duplicates found, report to user. Do NOT overwrite without confirmation.
 
 ### Step 4: Generate Tags
 
-1. Read note: `validator.read_note_content(filepath)` -> `{title, abstract, overview}`
+1. Read note: `alphaxiv_workflow.validate.read_note_content(filepath)` -> `{title, abstract, overview}`
 2. Analyze content and generate **5-8 tags** covering:
    - Research area (e.g., `computer-vision`, `nlp`)
    - Task (e.g., `semantic-segmentation`, `image-classification`)
@@ -74,7 +74,17 @@ If duplicates found, report to user. Do NOT overwrite without confirmation.
    - Key concepts (e.g., `open-vocabulary`, `zero-shot`)
    - Model/Architecture (e.g., `vision-transformer`, `clip`)
 3. Tags: lowercase, kebab-case, English
-4. Merge: `validator.merge_tags(filepath, new_tags)`
+4. Merge: `alphaxiv_workflow.validate.merge_tags(filepath, new_tags)`
+
+## Handoff
+
+After all papers pass validation, the main skill automatically triggers **Post-Import Auto-Backfill**:
+1. Runs `alphaxiv_workflow/backfill.py` to fetch overviews for any `blog_status: pending` papers
+2. Uses Playwright to trigger overview generation for papers still without overviews
+3. Runs `alphaxiv_workflow/backfill.py` again to save newly generated overviews
+4. Runs `alphaxiv_workflow/unify.py --phase 2` to normalize structure
+
+No manual action needed — this is fully automatic.
 
 ## Rules
 

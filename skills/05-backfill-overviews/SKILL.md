@@ -1,5 +1,5 @@
 ---
-name: backfill-overviews
+name: 05-backfill-overviews
 description: Use when paper notes have blog_status: pending and need AI overview content. Fetches existing overviews from AlphaXiv public API — no API key required.
 ---
 
@@ -9,14 +9,16 @@ Fetch missing AI overviews from AlphaXiv public API and update paper notes in th
 
 **No API key required.** AlphaXiv public API serves overviews via `get_overview(version_id, language)` with an unauthenticated `AlphaxivCat()` client.
 
-All commands run from the `scripts/` directory: `cd scripts`
+**This pipeline is auto-triggered after every import** (see main SKILL.md Post-Import Auto-Backfill). Manual invocation is for batch processing of pre-existing pending papers or reprocessing after AlphaXiv outages.
+
+All commands run from the project root. Ensure `pip install -e .` has been run first.
 
 ## Process
 
 ### Step 1: Scan
 
 ```bash
-python backfill_overviews.py --dry-run
+python -m alphaxiv_workflow.backfill --dry-run
 ```
 
 Shows papers with `blog_status: pending` in `300 Resources/320 References/`.
@@ -24,7 +26,7 @@ Shows papers with `blog_status: pending` in `300 Resources/320 References/`.
 ### Step 2: Backfill
 
 ```bash
-python backfill_overviews.py --workers 3
+python -m alphaxiv_workflow.backfill --workers 3
 ```
 
 For each pending paper:
@@ -45,14 +47,16 @@ For papers without existing overviews, use Playwright browser automation:
 
 ```javascript
 // Critical: use waitUntil: 'load' (NOT 'networkidle' — times out on persistent connections)
-// Wait 4-5s after navigation for React to render the Generate button
+// Wait 4-5s after navigation for React to render the Generate/Retry button
 // Use DOM search to find the button (text-based selectors are unreliable)
+// Matches BOTH "Generate Overview" (fresh) AND "Try Again"/"Retry" (error recovery)
 for (const aid of ['id1', 'id2', 'id3']) {
   try { await page.goto(`https://alphaxiv.org/overview/${aid}`, { waitUntil: 'load', timeout: 20000 }); } catch(e) {}
   await page.waitForTimeout(4000);
   await page.evaluate(() => {
+    const TRIGGER_TEXTS = ['Generate Overview', 'Try Again', 'try again', 'Try again', 'Retry', 'Regenerate'];
     const btn = [...document.querySelectorAll('button')]
-      .find(b => b.textContent.trim() === 'Generate Overview');
+      .find(b => TRIGGER_TEXTS.some(t => b.textContent.trim().includes(t)));
     if (btn) btn.click();
   });
   await page.waitForTimeout(2000);
@@ -69,15 +73,15 @@ for (const aid of ['id1', 'id2', 'id3']) {
 | Exactly 3 per batch | **NEVER exceed.** AlphaXiv server limit: 3 parallel generations. Exceeding triggers: `You are generating blogs too quickly. Please wait a moment before trying again.` |
 | Wait 3 min between batches | Generation takes ~1-2 min, wait buffer for completion |
 | Retry stubborn papers | Some papers need 2-3 retriggers before generation succeeds |
-| No overview + no Generate button | Paper may be **transferring** on AlphaXiv. Wait hours/days and retry — overview becomes available after transfer completes. |
+| No button found (no Generate/Retry) | Paper may be **transferring** on AlphaXiv, or already has an overview. Wait hours/days and retry — overview becomes available after transfer completes. |
 
 ### Full Workflow
 
 1. Navigate to `https://alphaxiv.org/overview/{arxiv_id}` (requires AlphaXiv login)
 2. Ensure language is set to "zh" (Chinese)
-3. Click "Generate Overview" button using the DOM search pattern above
+3. Click the trigger button ("Generate Overview" / "Try Again" / "Retry") using the DOM search pattern above
 4. Trigger exactly 3 papers, then **wait 3 minutes**
-5. Run `python backfill_overviews.py --workers 3` to fetch and save
+5. Run `python -m alphaxiv_workflow.backfill --workers 3` to fetch and save
 6. Repeat for remaining papers until 0 pending
 
 ## How It Works
@@ -104,4 +108,4 @@ After import + backfill, every note should have:
 ## 相关引用         (from API overview.citations OR overview.overview tail)
 ```
 
-Use `add_missing_sections.py` to fill gaps from API. Use `fix_placeholder_citations.py` for `*暂无相关引用*` placeholders.
+Use `alphaxiv_workflow/fixups.py` to fill gaps from API. Use `alphaxiv_workflow/fixups.py` for `*暂无相关引用*` placeholders.

@@ -1,5 +1,5 @@
 ---
-name: literature-synthesis
+name: 04-literature-synthesis
 description: Use when user wants to analyze, summarize, or synthesize saved paper notes in the Obsidian vault by topic or author. Triggered by analyze sub-command or explicit literature review requests.
 ---
 
@@ -8,7 +8,7 @@ description: Use when user wants to analyze, summarize, or synthesize saved pape
 Search, synthesize, and iteratively refine literature reviews using LLM generation.
 Outputs structured synthesis notes to `200 Areas/深度学习/`.
 
-All commands run from the `scripts/` directory: `cd scripts`
+All commands run from the project root. Ensure `pip install -e .` has been run first.
 
 ## Process
 
@@ -23,7 +23,7 @@ All commands run from the `scripts/` directory: `cd scripts`
 
 ```bash
 python -c "
-from literature_analyzer import find_notes_by_topic
+from alphaxiv_workflow.synthesis import find_notes_by_topic
 papers = find_notes_by_topic('TOPIC', 'VAULT_PATH')
 print(f'Found {len(papers)} papers')
 for p in papers:
@@ -56,7 +56,7 @@ User can exclude weak-relevance papers before synthesis.
 
 ```bash
 python -c "
-from literature_analyzer import build_synthesis_note, build_synthesis_prompt, extract_paper_summary
+from alphaxiv_workflow.synthesis import build_synthesis_note, build_synthesis_prompt, extract_paper_summary
 
 # Enrich papers with extracted summaries
 for p in papers:
@@ -110,7 +110,7 @@ Use `analyze "topic" --quick` to skip the confirmation and iteration steps — g
 
 ## Output
 
-Saved to `200 Areas/深度学习/{topic}_文献综述.md` or `{author}_文献分析.md`.
+Saved to `200 Areas/深度学习/AI 综述 {topic} {YYYY-MM-DD}.md`.
 
 ## Rules
 

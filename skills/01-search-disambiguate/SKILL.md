@@ -1,22 +1,35 @@
 ---
-name: search-disambiguate
-description: Use when given a paper title or keyword and need to find the exact arXiv paper on AlphaXiv before importing to Obsidian. Supports single and multi-paper selection. Includes vault duplicate detection and paper quality assessment.
+name: 01-search-disambiguate
+description: Use when given a paper title, keyword, or `hot` directive and need to find arXiv papers on AlphaXiv before importing to Obsidian. Supports search and hot-papers modes, single and multi-paper selection. Includes vault duplicate detection and paper quality assessment.
 ---
 
 # Search & Disambiguate (Gate 1)
 
 Search AlphaXiv for papers matching a query, display with publication info (venue, CCF, dates, first author), and present candidates for user confirmation.
 
-All commands run from the `scripts/` directory: `cd scripts`
+All commands run from the project root. Ensure `pip install -e .` has been run first.
 
 ## Process
 
 ### Step 1: Search & Display
 
+The search supports **boolean operators** (UPPERCASE): `AND`, `OR`, `NOT`, `-word` exclusion, and `(...)` grouping.
+Simple queries (no operators) pass directly to AlphaXiv `fast_search`. Complex queries are parsed by `query_parser.py` (recursive descent) with post-filtering.
+
+| Operator | Example | Behavior |
+|----------|---------|----------|
+| `AND` | `diffusion AND image` | Both terms must match (default) |
+| `OR` | `diffusion OR gan` | Either term matches — multi-search merged |
+| `NOT` | `vision NOT detection` | Exclude papers containing the term |
+| `-word` | `transformer -attention` | Shorthand for NOT |
+| `(...)` | `(diffusion OR gan) AND image` | Grouping for precedence |
+
+UPPERCASE = operator; lowercase = search keyword. Quoted phrases work: `"image generation" AND diffusion`.
+
 Run the Gate 1 search script with a data file for handoff:
 
 ```bash
-python gate1_search.py "<query>" "<VAULT_PATH>" --data-file /tmp/alphaxiv_gate1_data.json
+python -m alphaxiv_workflow.search "<query>" "<VAULT_PATH>" --data-file /tmp/alphaxiv_gate1_data.json
 ```
 
 The script outputs:
@@ -52,6 +65,20 @@ If user selects a paper marked `已保存 ✓`:
 - Ask: "Skip (s), Overwrite (o), or Open existing note (open)?"
 - Default: skip (exclude from import batch)
 
+### Hot Papers Mode
+
+When user says `import hot` or `hot`:
+
+```bash
+python -m alphaxiv_workflow.fetch_hot "VAULT_PATH" --data-file /tmp/alphaxiv_hot_papers.json
+```
+
+The script scrapes `https://alphaxiv.org/` for trending paper IDs, batch-fetches arXiv API for metadata, and outputs a PrettyTable with the same columns as the search table.
+
+Options:
+- `--limit N` — show only top N hot papers
+- `--json` — machine-readable output
+
 ## Rules
 
 - **Always show candidates for confirmation**, even with only 1 result
@@ -63,7 +90,7 @@ If user selects a paper marked `已保存 ✓`:
 
 ## Handoff
 
-Write selected papers to `/tmp/alphaxiv_selections.json` and pass to **build-note** (REQUIRED SUB-SKILL):
+Write selected papers to `/tmp/alphaxiv_selections.json` and pass to **02-build-note** (REQUIRED SUB-SKILL):
 
 ```json
 [{"arxiv_id": "2301.12345", "title": "Paper Title"}, ...]

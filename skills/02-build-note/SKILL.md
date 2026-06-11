@@ -1,5 +1,5 @@
 ---
-name: build-note
+name: 02-build-note
 description: Use when confirmed arXiv paper metadata is ready and need to construct a structured Obsidian markdown note with title validation and formatting from AlphaXiv data.
 ---
 
@@ -7,7 +7,7 @@ description: Use when confirmed arXiv paper metadata is ready and need to constr
 
 Fetch full paper data from AlphaXiv and construct a structured Obsidian markdown note.
 
-All commands run from the `scripts/` directory: `cd scripts`
+All commands run from the project root. Ensure `pip install -e .` has been run first.
 
 ## Process
 
@@ -16,13 +16,13 @@ All commands run from the `scripts/` directory: `cd scripts`
 ```bash
 python -c "
 
-from alphaxiv_client import get_paper_metadata, get_overview, fetch_publication_info, fetch_publication_rank
+from alphaxiv_workflow import get_paper_metadata, get_overview, fetch_publication_info, fetch_publication_rank
 meta = get_paper_metadata('ARXIV_ID')
 pub_info = fetch_publication_info('ARXIV_ID', abstract=meta.abstract)
 pub_rank = fetch_publication_rank(pub_info.get('published_venue', ''))
 en = get_overview(meta.version_id, 'en')
 zh = get_overview(meta.version_id, 'zh')
-from note_builder import build_note
+from alphaxiv_workflow.note_builder import build_note
 content, warnings = build_note(meta, zh, en, pub_info=pub_info, pub_rank=pub_rank)
 print(f'Warnings: {warnings}')
 "
@@ -38,18 +38,17 @@ Publication info fetched via multi-source fallback:
 
 If warnings contain `blog_pending:` → overview not yet available on AlphaXiv.
 
-The note saves with `blog_status: pending`. Run `backfill-overviews` later:
+The note saves with `blog_status: pending`. **No manual action needed** — the main skill's Post-Import Auto-Backfill (Gate 5) automatically runs `alphaxiv_workflow/backfill.py` + Playwright trigger after all papers complete import.
 
+Manual fallback (if auto-backfill fails):
 ```bash
-python backfill_overviews.py --workers 3
+python -m alphaxiv_workflow.backfill --workers 3
 ```
-
-This fetches overviews that already exist on AlphaXiv via public API (no key needed).
-For papers needing new generation, use Playwright browser automation (see `skills/backfill-overviews/SKILL.md`).
+For papers needing new generation, use Playwright browser automation (see `skills/05-backfill-overviews/SKILL.md`).
 
 ### Step 2: Title Validation
 
-Use `note_builder.check_title_issues(title, vault_path)` for 4-dimensional compliance:
+Use `alphaxiv_workflow.alphaxiv_workflow.note_builder.check_title_issues(title, vault_path)` for 4-dimensional compliance:
 
 | Dimension | Rule | Severity |
 |-----------|------|----------|
@@ -100,4 +99,4 @@ Save to `{vault_path}/300 Resources/320 References/{sanitize_filename(title)}.md
 
 ## Handoff
 
-Pass filepath to **validate-import** (REQUIRED SUB-SKILL).
+Pass filepath to **03-validate-import** (REQUIRED SUB-SKILL).
