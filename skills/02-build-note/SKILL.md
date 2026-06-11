@@ -1,102 +1,81 @@
 ---
 name: 02-build-note
-description: Use when confirmed arXiv paper metadata is ready and need to construct a structured Obsidian markdown note with title validation and formatting from AlphaXiv data.
+description: Use when confirmed arXiv paper metadata is ready from Gate 1 and need to fetch AlphaXiv data and construct a structured Obsidian markdown note for import.
 ---
 
 # Build Note (Gate 2)
 
 Fetch full paper data from AlphaXiv and construct a structured Obsidian markdown note.
 
-All commands run from the project root. Ensure `pip install -e .` has been run first.
-
 ## Process
 
-### Step 1: Fetch Data
+### Step 1: Build Note
 
 ```bash
-python -c "
-
-from alphaxiv_workflow import get_paper_metadata, get_overview, fetch_publication_info, fetch_publication_rank
-meta = get_paper_metadata('ARXIV_ID')
-pub_info = fetch_publication_info('ARXIV_ID', abstract=meta.abstract)
-pub_rank = fetch_publication_rank(pub_info.get('published_venue', ''))
-en = get_overview(meta.version_id, 'en')
-zh = get_overview(meta.version_id, 'zh')
-from alphaxiv_workflow.note_builder import build_note
-content, warnings = build_note(meta, zh, en, pub_info=pub_info, pub_rank=pub_rank)
-print(f'Warnings: {warnings}')
-"
+python -m alphaxiv_workflow.build "<paper title or arXiv ID>"
 ```
 
-Publication info fetched via multi-source fallback:
+This CLI handles the full pipeline:
+1. Resolves paper ID via AlphaXiv search
+2. Fetches metadata + Chinese overview + English overview
+3. Fetches publication info from arXiv API (multi-source fallback)
+4. Fetches publication ranking from EasyScholar (if configured)
+5. Builds markdown note with all frontmatter fields
+6. Saves to `{vault}/300 Resources/320 References/{title}.md`
+
+### Step 2: Handle Warnings
+
+Common warnings from build output:
+
+| Warning | Meaning | Action |
+|---------|---------|--------|
+| `blog_pending: ...` | Overview not yet available on AlphaXiv | Note saves with `blog_status: pending`. Auto-backfill (Gate 5) handles this. |
+| `citation_null` | Citation field missing from API | Skip single citation, proceed |
+| `empty_authors` | BibTeX missing authors | Falls back to metadata authors |
+
+### Step 3: Title Validation
+
+CLI handles title validation internally via `note_builder.check_title_issues()`:
+- Filesystem safety: no `\ / : * ? " < > |`
+- Collision check: file must not already exist
+- Consistency: removes `[arxiv_id]` prefix, `... - arXiv` suffix
+- Truncation: detects `...` truncated titles
+
+BLOCK issues stop the build. WARN issues proceed with cleaned title.
+
+## Publication Data Sources
+
+Multi-source fallback for publication info:
 1. arXiv API `<journal_ref>` (most reliable)
 2. arXiv API `<comment>` (e.g. "Accepted at ICML 2023 (Oral)")
 3. Abstract text parsing (e.g. "Published as a conference paper at ICLR 2024")
-4. Graceful degradation — missing values left empty, note creation never blocked
+4. Graceful degradation — missing values left empty
 
-### Step 1.5: Handle Missing Overview
+## Common Mistakes
 
-If warnings contain `blog_pending:` → overview not yet available on AlphaXiv.
-
-The note saves with `blog_status: pending`. **No manual action needed** — the main skill's Post-Import Auto-Backfill (Gate 5) automatically runs `alphaxiv_workflow/backfill.py` + Playwright trigger after all papers complete import.
-
-Manual fallback (if auto-backfill fails):
-```bash
-python -m alphaxiv_workflow.backfill --workers 3
-```
-For papers needing new generation, use Playwright browser automation (see `skills/05-backfill-overviews/SKILL.md`).
-
-### Step 2: Title Validation
-
-Use `alphaxiv_workflow.alphaxiv_workflow.note_builder.check_title_issues(title, vault_path)` for 4-dimensional compliance:
-
-| Dimension | Rule | Severity |
-|-----------|------|----------|
-| Filesystem | No `\ / : * ? " < > \|` | BLOCK |
-| Collision | File must not already exist | BLOCK |
-| Consistency | Remove `[arxiv_id]` prefix, `... - arXiv` suffix | warn |
-| Truncation | Detect `...` truncated titles | warn |
-
-BLOCK issues -> report and stop. Warn/info only -> proceed with cleaned title.
-
-### Step 3: Build Note
-
-`build_note(metadata, overview_zh, overview_en, pub_info=None, pub_rank=None)` returns `(content, warnings)`.
-
-**Publication frontmatter fields** (from arXiv API multi-source fallback):
-- `published_venue` — formal publication venue (e.g. "NeurIPS 2020"), omitted when unknown
-- `presentation_type` — "Oral" or "Spotlight", omitted for regular papers
-- `published_date` — formal publication date (YYYY-MM-DD), from arXiv first-published date
-
-**Ranking frontmatter fields** (from EasyScholar, omitted when venue unknown):
-- `ccf` — CCF 推荐等级 (A/B/C), e.g. "A"
-- `sci_jcr` — SCI JCR 分区 (Q1-Q4), e.g. "Q1"
-- `sci_cas` — 中科院升级版分区, e.g. "计算机科学1区"
-- `sci_cas_top` — 中科院升级版Top期刊, boolean
-- `fms` — FMS 等级
-- `utd24` — UTD24 期刊, boolean
-- `ft50` — FT50 期刊, boolean
-- `swufe` — 西南财经大学等级
-
-**EasyScholar configuration:** Store `easyscholar_secret_key` in `~/.alphaxiv-to-obsidian.json`.
-Gracefully degrades when config missing or API unreachable — all ranking fields left empty.
-
-**Degradation:**
-
-| Condition | Action |
-|-----------|--------|
-| CN overview empty | Fallback to EN |
-| Both empty | Placeholder, mark incomplete |
-| Citation null fields | Skip single citation |
-| BibTeX no authors | Fallback metadata authors |
-| All authors fail | Empty list, report warning |
-| EasyScholar unreachable | Leave ranking fields empty |
-| No venue detected | Skip EasyScholar query entirely |
-
-### Step 4: Save
-
-Save to `{vault_path}/300 Resources/320 References/{sanitize_filename(title)}.md`.
+| Mistake | Fix |
+|---------|-----|
+| Confusing 404 with pending | `blog_pending` warning = overview not generated yet. API 404 = paper not on AlphaXiv. Different issues. |
+| Re-running build for existing paper | Use Gate 3 `check_duplicates` first. Build creates new file each time. |
+| Expecting EasyScholar for all papers | EasyScholar only works when venue is detected. No venue → no ranking. This is normal. |
 
 ## Handoff
 
 Pass filepath to **03-validate-import** (REQUIRED SUB-SKILL).
+
+## Fallback
+
+If CLI fails, use direct Python API:
+```python
+from alphaxiv_workflow.api import resolve_paper_id, get_paper_metadata, get_overview, fetch_publication_info
+from alphaxiv_workflow.venue import fetch_publication_rank
+from alphaxiv_workflow.note_builder import build_note, sanitize_filename
+
+arxiv_id = resolve_paper_id("query")
+meta = get_paper_metadata(arxiv_id)
+zh = get_overview(meta.version_id, 'zh')
+en = get_overview(meta.version_id, 'en')
+pub_info = fetch_publication_info(arxiv_id, abstract=meta.abstract)
+pub_rank = fetch_publication_rank(pub_info.get('published_venue', '')) if pub_info.get('published_venue') else None
+content, warnings = build_note(meta, zh, en, pub_info=pub_info, pub_rank=pub_rank)
+```

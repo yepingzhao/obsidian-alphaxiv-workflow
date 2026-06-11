@@ -1,21 +1,15 @@
 ---
 name: 05-backfill-overviews
-description: Use when paper notes have blog_status: pending and need AI overview content. Fetches existing overviews from AlphaXiv public API — no API key required.
+description: Use when paper notes have blog_status: pending and need AI overview content fetched or generated. Auto-triggered after every import; manual invocation for batch processing pre-existing pending papers.
 ---
 
 # Backfill Overviews
 
-Fetch missing AI overviews from AlphaXiv public API and update paper notes in the vault.
-
-**No API key required.** AlphaXiv public API serves overviews via `get_overview(version_id, language)` with an unauthenticated `AlphaxivCat()` client.
-
-**This pipeline is auto-triggered after every import** (see main SKILL.md Post-Import Auto-Backfill). Manual invocation is for batch processing of pre-existing pending papers or reprocessing after AlphaXiv outages.
-
-All commands run from the project root. Ensure `pip install -e .` has been run first.
+Fetch missing AI overviews from AlphaXiv public API and update paper notes. For papers without existing overviews, trigger generation via Playwright browser automation.
 
 ## Process
 
-### Step 1: Scan
+### Step 1: Scan for Pending Papers
 
 ```bash
 python -m alphaxiv_workflow.backfill --dry-run
@@ -23,30 +17,41 @@ python -m alphaxiv_workflow.backfill --dry-run
 
 Shows papers with `blog_status: pending` in `300 Resources/320 References/`.
 
-### Step 2: Backfill
+### Step 2: Fetch Existing Overviews
 
 ```bash
 python -m alphaxiv_workflow.backfill --workers 3
 ```
 
 For each pending paper:
-1. Gets `version_id` from AlphaXiv metadata (public API)
+1. Gets `version_id` from AlphaXiv metadata (public API, no auth needed)
 2. Tries `get_overview(version_id, 'zh')` for Chinese overview
 3. Falls back to `get_overview(version_id, 'en')` if Chinese unavailable
-4. Updates note: replaces placeholder `## AI 综述` section, removes `blog_status: pending`
+4. Updates note: replaces placeholder, removes `blog_status: pending`
 
 ### Step 3: Handle Remainders
 
-Papers that still return 404 (no overview exists on AlphaXiv) stay `blog_status: pending`. These need generation to be triggered first.
+Papers still returning 404 stay `blog_status: pending`. These need generation triggered.
 
-## Generating New Overviews (Playwright)
+## Playwright Trigger (for papers without overviews)
 
-For papers without existing overviews, use Playwright browser automation:
+### Startup
 
-### Triggering (per batch of 3)
+Navigate to AlphaXiv to ensure logged-in browser session:
+```
+mcp__playwright__browser_navigate → https://alphaxiv.org
+```
+
+### List Pending Papers
+
+```bash
+python -m alphaxiv_workflow.trigger --batch
+```
+
+### Trigger Generation (per batch of 3)
 
 ```javascript
-// Critical: use waitUntil: 'load' (NOT 'networkidle' — times out on persistent connections)
+// Use waitUntil: 'load' (NOT 'networkidle' — times out on persistent connections)
 // Wait 4-5s after navigation for React to render the Generate/Retry button
 // Use DOM search to find the button (text-based selectors are unreliable)
 // Matches BOTH "Generate Overview" (fresh) AND "Try Again"/"Retry" (error recovery)
@@ -70,33 +75,26 @@ for (const aid of ['id1', 'id2', 'id3']) {
 | `waitUntil: 'load'` only | `networkidle` times out on pages with persistent WS/analytics connections |
 | Wait 4-5s after navigation | AlphaXiv is a React SPA — the Generate section renders asynchronously |
 | Use `evaluate()` to find button | `getByText()`, `getByRole()` selectors are unreliable for this button |
-| Exactly 3 per batch | **NEVER exceed.** AlphaXiv server limit: 3 parallel generations. Exceeding triggers: `You are generating blogs too quickly. Please wait a moment before trying again.` |
+| Exactly 3 per batch | **NEVER exceed.** Server limit: 3 parallel generations. Exceeding triggers rate-limit error. |
 | Wait 3 min between batches | Generation takes ~1-2 min, wait buffer for completion |
 | Retry stubborn papers | Some papers need 2-3 retriggers before generation succeeds |
-| No button found (no Generate/Retry) | Paper may be **transferring** on AlphaXiv, or already has an overview. Wait hours/days and retry — overview becomes available after transfer completes. |
 
 ### Full Workflow
 
-1. Navigate to `https://alphaxiv.org/overview/{arxiv_id}` (requires AlphaXiv login)
-2. Ensure language is set to "zh" (Chinese)
-3. Click the trigger button ("Generate Overview" / "Try Again" / "Retry") using the DOM search pattern above
-4. Trigger exactly 3 papers, then **wait 3 minutes**
-5. Run `python -m alphaxiv_workflow.backfill --workers 3` to fetch and save
-6. Repeat for remaining papers until 0 pending
+1. Navigate to `https://alphaxiv.org` (ensure logged in)
+2. Run `python -m alphaxiv_workflow.trigger --batch` to get batch arrays
+3. Trigger exactly 3 papers, then **wait 3 minutes**
+4. Run `python -m alphaxiv_workflow.backfill --workers 3` to fetch and save
+5. Repeat until 0 pending
 
-## How It Works
+## Common Mistakes
 
-- Reads existing overviews from AlphaXiv API (no auth needed for GET)
-- LaTeX math (`\frac`, `\mathcal`, etc.) in overviews is handled safely
-- **Citations**: extracted from BOTH `overview.citations` (structured) AND `overview.overview` markdown text (embedded `## 相关引用`/`## 相关引文` section). Structured field is often empty.
-- Citation regex: `r'##\s*(?:相关引[用文]|Reference|参考文献?)\s*\n(.*?)\Z'` — uses `\Z` (NOT `$`) to avoid MULTILINE truncation
-
-## Rules
-
-- Only processes papers with `blog_status: pending` in frontmatter
-- Chinese (zh) preferred, English (en) as fallback
-- Papers already with `## AI 综述` content are skipped
-- Failed papers (404) remain `blog_status: pending`
+| Mistake | Fix |
+|---------|-----|
+| Using `networkidle` waitUntil | Always use `waitUntil: 'load'`. AlphaXiv has persistent WebSocket connections that never idle. |
+| Triggering more than 3 at once | Server hard limit. Error: "You are generating blogs too quickly." |
+| Not waiting between batches | Generation takes 1-2 min. Backfill will return 404 if run too early. |
+| Assuming no button = broken | Paper may be transferring on AlphaXiv. Wait hours/days and retry. |
 
 ## Standard Note Structure
 
@@ -108,4 +106,12 @@ After import + backfill, every note should have:
 ## 相关引用         (from API overview.citations OR overview.overview tail)
 ```
 
-Use `alphaxiv_workflow/fixups.py` to fill gaps from API. Use `alphaxiv_workflow/fixups.py` for `*暂无相关引用*` placeholders.
+## Fallback
+
+If CLI fails, use direct Python API:
+```python
+from alphaxiv_workflow.backfill import scan_pending, backfill_paper
+pending = scan_pending("VAULT_PATH")
+for p in pending:
+    backfill_paper(p, "VAULT_PATH")
+```

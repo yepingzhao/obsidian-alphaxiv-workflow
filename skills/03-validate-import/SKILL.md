@@ -1,90 +1,64 @@
 ---
 name: 03-validate-import
-description: Use when a newly saved paper note in Obsidian needs frontmatter validation, intelligent tag generation, and duplicate detection after import.
+description: Use when a paper note has been saved to the Obsidian vault from Gate 2 and needs frontmatter validation, heading hierarchy check, duplicate detection, and intelligent tag generation.
 ---
 
 # Validate Import (Gate 3)
 
 Post-save validation and enrichment of imported paper notes.
 
-All commands run from the project root. Ensure `pip install -e .` has been run first.
-
 ## Process
 
-### Step 1: Validate Frontmatter
+### Step 1: Run Full Validation
 
 ```bash
-python -c "
-
-from alphaxiv_workflow.validate import validate_frontmatter
-result = validate_frontmatter('FILEPATH')
-print(result)
-"
+python -m alphaxiv_workflow.validate "FILEPATH"
 ```
 
-**Validation levels:**
+This runs all checks: frontmatter, heading hierarchy, duplicates, and tag count. Use `--step` for single checks:
+
+```bash
+python -m alphaxiv_workflow.validate "FILEPATH" --step frontmatter
+python -m alphaxiv_workflow.validate "FILEPATH" --step headings
+python -m alphaxiv_workflow.validate "FILEPATH" --step duplicates
+python -m alphaxiv_workflow.validate "FILEPATH" --step tags
+```
+
+### Step 2: Understand Validation Levels
 
 | Severity | Check | Action |
 |----------|-------|--------|
 | **BLOCK** | YAML parse error | Stop, report error |
 | **BLOCK** | Missing title or arxiv_id | Stop, report error |
+| **BLOCK** | Missing required H2 (`摘要`, `AI 摘要`, `AI 综述 (中文)`, `相关引用`) | Must be added before proceeding |
 | **WARN** | Authors list empty | Save with warning |
-| **WARN** | Tags count < 5 | Flag needs-tags |
+| **WARN** | Tags count < 5 | Flag for tag generation |
+| **WARN** | Skipped heading level (H2→H4 without H3) | Fix heading hierarchy |
+| **INFO** | No published_venue | Publication venue unknown (normal for preprints) |
+| **INFO** | No published_date | Publication date unknown |
 
-### Step 2: Validate Heading Hierarchy
+### Step 3: Handle Duplicates
 
-```bash
-python -c "
-
-from alphaxiv_workflow.validate import check_heading_hierarchy
-result = check_heading_hierarchy('FILEPATH')
-print(result)
-"
-```
-
-**Hierarchy checks:**
-
-| Severity | Check | Rule |
-|----------|-------|------|
-| **BLOCK** | No H1 or multiple H1 | Exactly one `#` title heading |
-| **BLOCK** | No headings in body | Frontmatter parsed but body empty |
-| **WARN** | Skipped heading level | H2 -> H4 without H3 in between |
-| **WARN** | Depth > H4 | `#####` and deeper not allowed |
-| **BLOCK** | Missing required H2 section | All 4 must exist: `## 摘要`, `## AI 摘要`, `## AI 综述 (中文)`, `## 相关引用` |
-
-### Step 3: Check Duplicates
-
-```bash
-python -c "
-
-from alphaxiv_workflow.validate import check_duplicates
-dups = check_duplicates('ARXIV_ID', 'VAULT_PATH')
-"
-```
-
-If duplicates found, report to user. Do NOT overwrite without confirmation.
+If duplicates found for the same `arxiv_id`:
+- Report to user with file paths
+- Do NOT overwrite without confirmation
+- User chooses: skip / overwrite / open existing
 
 ### Step 4: Generate Tags
 
-1. Read note: `alphaxiv_workflow.validate.read_note_content(filepath)` -> `{title, abstract, overview}`
-2. Analyze content and generate **5-8 tags** covering:
-   - Research area (e.g., `computer-vision`, `nlp`)
-   - Task (e.g., `semantic-segmentation`, `image-classification`)
-   - Method (e.g., `contrastive-learning`, `attention-mechanism`)
-   - Key concepts (e.g., `open-vocabulary`, `zero-shot`)
-   - Model/Architecture (e.g., `vision-transformer`, `clip`)
+Tag generation requires LLM analysis. Use Claude inline:
+1. Read note content: `alphaxiv_workflow.validate.read_note_content(filepath)` → `{title, abstract, overview}`
+2. Generate 5-8 tags covering: research area, task, method, key concepts, model/architecture
 3. Tags: lowercase, kebab-case, English
 4. Merge: `alphaxiv_workflow.validate.merge_tags(filepath, new_tags)`
 
-## Handoff
+## Common Mistakes
 
-After all papers pass validation, the main skill automatically triggers **Post-Import Auto-Backfill**:
-1. Runs `alphaxiv_workflow/backfill.py` to fetch overviews for any `blog_status: pending` papers
-2. Uses Playwright to trigger overview generation for papers still without overviews
-3. Runs `alphaxiv_workflow/backfill.py` again to save newly generated overviews
-4. Runs `alphaxiv_workflow/unify.py --phase 2` to normalize structure
-
-No manual action needed — this is fully automatic.
+| Mistake | Fix |
+|---------|-----|
+| Running `merge_tags` on notes that already have good tags | `merge_tags` is additive — never removes existing tags. Only run for notes with <5 tags. |
+| Assuming BLOCK means paper is broken | Most BLOCKs are fixable: add missing H2 sections, fix YAML quotes. |
+| Skipping validation for "simple" papers | Every import gets validated. Even clean-looking notes can have hidden YAML issues. |
 
 ## Rules
 
@@ -92,3 +66,19 @@ No manual action needed — this is fully automatic.
 - Duplicates require user confirmation
 - Tag generation is mandatory for every import
 - Tags are additive: never remove existing tags
+- Validation does NOT modify the note (except `merge_tags`)
+
+## Handoff
+
+After all papers pass validation, the main skill automatically triggers **Post-Import Auto-Backfill** (see `skills/05-backfill-overviews/SKILL.md`).
+
+## Fallback
+
+If CLI fails, use direct Python API:
+```python
+from alphaxiv_workflow.validate import validate_frontmatter, check_heading_hierarchy, check_duplicates, merge_tags, read_note_content
+result = validate_frontmatter("FILEPATH")
+headings = check_heading_hierarchy("FILEPATH")
+dups = check_duplicates("ARXIV_ID", "VAULT_PATH")
+content = read_note_content("FILEPATH")  # for tag generation
+```
