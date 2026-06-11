@@ -250,3 +250,61 @@ def merge_tags(filepath: str, new_tags: list) -> bool:
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(updated)
     return True
+
+
+# --- CLI entry point ---
+if __name__ == '__main__':
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        description='Validate imported paper note in Obsidian vault')
+    parser.add_argument('filepath', help='Path to the paper markdown file')
+    parser.add_argument('--step', choices=['frontmatter', 'headings', 'duplicates', 'tags'],
+                        help='Run only a specific validation step')
+    parser.add_argument('--generate-tags', action='store_true',
+                        help='Auto-generate and merge tags (requires --step tags)')
+    parser.add_argument('--vault', help='Vault path for duplicate check (overrides config)')
+    args = parser.parse_args()
+
+    from .config import VAULT_PATH
+
+    vault = args.vault or VAULT_PATH
+
+    if args.step == 'frontmatter' or args.step is None:
+        print('=== Frontmatter Validation ===')
+        result = validate_frontmatter(args.filepath)
+        for severity, msg in result['issues']:
+            print(f'  [{severity.upper()}] {msg}')
+        print(f'Status: {result["status"]}')
+
+    if args.step == 'headings' or args.step is None:
+        print('=== Heading Hierarchy Check ===')
+        result = check_heading_hierarchy(args.filepath)
+        for severity, msg in result['issues']:
+            print(f'  [{severity.upper()}] {msg}')
+        print(f'Status: {result["status"]}')
+
+    if args.step == 'duplicates' or args.step is None:
+        print('=== Duplicate Check ===')
+        fm = validate_frontmatter(args.filepath)['frontmatter']
+        arxiv_id = fm.get('arxiv_id', '')
+        if arxiv_id and vault:
+            dups = check_duplicates(arxiv_id, vault)
+            if dups:
+                print(f'  Found {len(dups)} duplicate(s):')
+                for d in dups:
+                    if d != args.filepath:
+                        print(f'    - {d}')
+            else:
+                print('  No duplicates found')
+        else:
+            print('  Skipped (no arxiv_id or vault path)')
+
+    if args.step == 'tags' or args.step is None:
+        print('=== Tag Check ===')
+        fm = validate_frontmatter(args.filepath)['frontmatter']
+        tags = fm.get('tags', [])
+        print(f'  Current tags ({len(tags)}): {tags}')
+        if args.generate_tags:
+            print('  Tag generation requires LLM analysis — run via Claude inline')
