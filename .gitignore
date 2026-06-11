@@ -10,6 +10,14 @@ __pycache__/
 .vscode/
 .idea/
 
+# Python packaging
+*.egg-info/
+dist/
+build/
+
+# Generated plans (superpowers)
+docs/superpowers/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -3,10 +3,9 @@ Unify YAML frontmatter and H2 headings across all paper notes.
 Phase 1: Fetch missing version IDs from AlphaXiv API
 Phase 2: Normalize frontmatter field order + H2 structure
 """
-import sys, os, re, time
+import os, re, time
 from collections import OrderedDict
 
-sys.path.insert(0, os.path.dirname(__file__))
 from .api import get_paper_metadata
 
 from .config import PAPERS_DIR

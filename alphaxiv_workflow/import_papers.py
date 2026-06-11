@@ -22,12 +22,6 @@ from .note_builder import (
 from .venue import get_venue_ranking
 from .config import VAULT_PATH
 
-try:
-    from .note_builder import CATEGORY_MAP
-except ImportError:
-    CATEGORY_MAP = {}
-
-ALPHAXIV_AVAILABLE = True
 OUTPUT_DIR = os.path.join(VAULT_PATH, '300 Resources', '320 References') if VAULT_PATH else ''
 print_lock = Lock()
 

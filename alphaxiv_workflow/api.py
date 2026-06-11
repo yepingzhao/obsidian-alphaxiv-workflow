@@ -19,10 +19,6 @@ from .query_parser import (
 from .venue import (
     _parse_venue_from_ref, _detect_presentation_type, _extract_venue_from_text,
 )
-try:
-    from .venue import fetch_publication_rank
-except ImportError:
-    fetch_publication_rank = None
 
 client = AlphaxivCat()
 
@@ -450,7 +446,15 @@ def _get_first_author(authors: list) -> str:
     if not authors:
         return 'Unknown'
     first = authors[0]
+    # 'LastName, FirstName' -> 'LastName'
+    if ',' in first:
+        return first.split(',')[0].strip()
+    # 'FirstName LastName' -> 'LastName'
+    parts = first.strip().split()
+    return parts[-1] if parts else first
 
+
+# ──────────────────────────────────────────────────────────────────
 # Vault duplicate detection — scans existing paper notes before import
 # ──────────────────────────────────────────────────────────────────
 

@@ -2,7 +2,6 @@
 Backfill AI overviews from AlphaXiv public API (no key required for reads).
 Scans blog_status:pending papers and fetches existing overviews.
 """
-import sys
 import os
 import re
 import json
@@ -12,8 +11,6 @@ import yaml
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
-
-sys.path.insert(0, os.path.dirname(__file__))
 
 from .api import get_paper_metadata, get_overview
 from .note_builder import demote_headings

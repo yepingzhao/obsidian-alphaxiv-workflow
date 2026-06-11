@@ -23,19 +23,6 @@ def _rate_limit():
     _last_request_time = time.time()
 
 
-def _load_secret_key() -> str | None:
-    """Load EasyScholar secret key from config file."""
-    config_path = os.path.expanduser('~/.alphaxiv-to-obsidian.json')
-    try:
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                cfg = json.load(f)
-            return cfg.get('easyscholar_secret_key')
-    except (json.JSONDecodeError, OSError):
-        pass
-    return None
-
-
 # ──────────────────────────────────────────────────────────────────
 # Venue abbreviation -> EasyScholar-recognized publication name
 # ──────────────────────────────────────────────────────────────────
