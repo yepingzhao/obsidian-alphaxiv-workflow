@@ -60,10 +60,41 @@ Configuration via `OBSIDIAN_VAULT_PATH` env var or `~/.alphaxiv-to-obsidian.json
 EasyScholar ranking requires `easyscholar_secret_key` in config (optional).
 Papers saved to `300 Resources/320 References/`. Synthesis to `200 Areas/深度学习/`.
 
+## Note Format
+
+All imported papers follow this canonical structure:
+
+```markdown
+## 摘要
+[paper abstract]
+
+---
+### AI 摘要          ← H3, nested under ## 摘要
+[AI summary paragraph]
+
+### 要点             ← H3 bullets
+### 问题
+### 方法
+### 结果
+
+---
+## AI 综述 (中文)     ← H2, detailed Chinese overview
+> *由 AlphaXiv 生成*
+---
+## 相关引用
+```
+
+**Key rules:**
+- `### AI 摘要` is **always H3** — never standalone `## AI 摘要`
+- `---` separates the paper's own abstract from the AI-generated summary sections
+- `build_summary_sections()` always outputs H3 (`###`) headings
+- Backfill fetches **both** ZH and EN overviews; EN summary used as fallback when ZH summary empty
+
 ## Known Pitfalls
 
 Critical issues documented in **[references/known-pitfalls.md](references/known-pitfalls.md)**. Key categories:
-- AlphaXiv API: citations in TWO places (structured field often empty, embedded in markdown)
+- AlphaXiv API: citations in TWO places (structured field often empty, embedded in markdown), inconsistent `summary_section_titles`
+- Note format corruptions: double headings (`### AI 摘要\n### 摘要`), H2 instead of H3, duplicate 中文综述
 - YAML frontmatter: quote hygiene, inline list handling, quoted `blog_status` detection
 - Playwright: 3-papers-per-batch hard server limit, multi-pattern button detection
 - Script execution order: `python -m alphaxiv_workflow.backfill` → `python -m alphaxiv_workflow.fixups add-summaries` → `python -m alphaxiv_workflow.unify --phase 2`

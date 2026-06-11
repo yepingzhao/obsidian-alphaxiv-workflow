@@ -69,8 +69,11 @@ def scan_pending() -> list:
 
 
 def update_note(filepath: str, overview_text: str, language: str,
-                structured_citations: list = None):
-    """Update note with AI overview content, remove blog_status: pending."""
+                structured_citations: list = None,
+                summary_data: dict = None,
+                summary_titles: dict = None):
+    """Update note with AI overview content + structured summary, remove blog_status: pending."""
+    from .note_builder import build_summary_sections
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
 
@@ -192,6 +195,24 @@ def update_note(filepath: str, overview_text: str, language: str,
             flags=re.DOTALL,
         )
 
+    # ── Update AI 摘要 with structured summary ──
+    # Also fix heading level: ## AI 摘要 → ### AI 摘要 (nested under ## 摘要)
+    if summary_data and isinstance(summary_data, dict) and summary_data.get('summary'):
+        structured = build_summary_sections(summary_data, summary_titles or {})
+        if structured:
+            # Replace existing AI 摘要 section (handles both ## and ###, any placeholder content)
+            content = re.sub(
+                r'#+\s*AI 摘要\n.*?(?=\n---|\n## |\Z)',
+                structured,
+                content,
+                count=1,
+                flags=re.DOTALL,
+            )
+    # Fix any remaining ## AI 摘要 → ### AI 摘要
+    content = content.replace('\n## AI 摘要\n', '\n### AI 摘要\n')
+    # Fix double heading: ### AI 摘要\n### <anything> → ### AI 摘要
+    content = re.sub(r'(### AI 摘要\n)\n### (?!AI 摘要)\S+.*?\n', r'\1', content)
+
     # Remove blog_status: pending from frontmatter (handles both quoted and unquoted)
     content = re.sub(r'\nblog_status:\s*"?pending"?\s*\n', '\n', content)
 
@@ -228,36 +249,47 @@ def process_paper(paper: dict, idx: int, total: int) -> dict:
             result['error'] = 'No version_id'
             return result
 
-        # Try Chinese first (with retry), fallback to English
+        # Fetch both ZH and EN (sequential to avoid rate limits)
         zh = get_overview_with_retry(vid, 'zh')
-        if zh:
-            d = zh.model_dump() if hasattr(zh, 'model_dump') else zh
-            overview = d.get('overview', '')
-            structured_cit = d.get('citations', [])
-            if overview and len(overview) > 100:
-                update_note(paper['filepath'], overview, 'zh',
-                            structured_citations=structured_cit)
-                result['ok'] = True
-                result['language'] = 'zh'
-                log(f'  ✅ [{idx}/{total}] {aid} ZH ({len(overview)}c) {paper["title"][:40]}')
-                return result
-
-        # Fallback to English (with retry)
         en = get_overview_with_retry(vid, 'en')
-        if en:
-            d = en.model_dump() if hasattr(en, 'model_dump') else en
-            overview = d.get('overview', '')
-            structured_cit = d.get('citations', [])
-            if overview and len(overview) > 100:
-                update_note(paper['filepath'], overview, 'en',
-                            structured_citations=structured_cit)
-                result['ok'] = True
-                result['language'] = 'en'
-                log(f'  ✅ [{idx}/{total}] {aid} EN ({len(overview)}c) {paper["title"][:40]}')
-                return result
 
-        log(f'  ⚠️ [{idx}/{total}] {aid}: No overview available')
-        result['error'] = 'No overview available'
+        zh_d = zh.model_dump() if zh and hasattr(zh, 'model_dump') else (zh or {})
+        en_d = en.model_dump() if en and hasattr(en, 'model_dump') else (en or {})
+
+        zh_overview = zh_d.get('overview', '')
+        en_overview = en_d.get('overview', '')
+        zh_summary = zh_d.get('summary', {})
+        zh_summary_titles = zh_d.get('summary_section_titles', {}) or {}
+        structured_cit = zh_d.get('citations', []) or en_d.get('citations', [])
+
+        # Prefer ZH for overview, fallback to EN
+        if zh_overview and len(zh_overview) > 100:
+            overview_text = zh_overview
+            overview_lang = 'zh'
+            # Use EN summary if ZH summary is empty
+            if not zh_summary or not isinstance(zh_summary, dict) or not zh_summary.get('summary'):
+                en_summary = en_d.get('summary', {})
+                if en_summary and isinstance(en_summary, dict) and en_summary.get('summary'):
+                    zh_summary = en_summary
+                    zh_summary_titles = en_d.get('summary_section_titles', {}) or {}
+        elif en_overview and len(en_overview) > 100:
+            overview_text = en_overview
+            overview_lang = 'en'
+            zh_summary = en_d.get('summary', {})
+            zh_summary_titles = en_d.get('summary_section_titles', {}) or {}
+        else:
+            log(f'  ⚠️ [{idx}/{total}] {aid}: No overview available')
+            result['error'] = 'No overview available'
+            return result
+
+        update_note(paper['filepath'], overview_text, overview_lang,
+                    structured_citations=structured_cit,
+                    summary_data=zh_summary,
+                    summary_titles=zh_summary_titles)
+        result['ok'] = True
+        result['language'] = overview_lang
+        log(f'  ✅ [{idx}/{total}] {aid} {overview_lang.upper()} ({len(overview_text)}c) {paper["title"][:40]}')
+        return result
 
     except Exception as e:
         msg = str(e)[:100]

@@ -175,7 +175,7 @@ def build_summary_sections(summary: dict, titles: dict) -> str:
             val = [v for v in val if v]
         if not val:
             continue
-        heading = '##' if is_main else '###'
+        heading = '###'  # always H3 — nested under ## 摘要
         parts.append(f'{heading} {label}')
         if isinstance(val, list):
             for item in val:
@@ -370,7 +370,7 @@ created: {now_str}
     if summary_sections:
         parts.append(summary_sections)
     else:
-        parts.append('## AI 摘要\n\n*AI 摘要正在生成中（blog_status: pending）...*\n')
+        parts.append('### AI 摘要\n\n*AI 摘要正在生成中（blog_status: pending）...*\n')
     parts.append('---\n')
 
     parts.append('## AI 综述 (中文)\n')
