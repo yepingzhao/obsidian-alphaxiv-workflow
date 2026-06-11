@@ -1,5 +1,5 @@
 """
-Tests for literature_analyzer.py — vault scanning, topic/author search,
+Tests for literature_synthesis.py — vault scanning, topic/author search,
 paper summary extraction, and synthesis note building.
 """
 import os
@@ -10,8 +10,7 @@ import pytest
 import re
 import yaml
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-from literature_analyzer import (
+from alphaxiv_workflow.synthesis import (
     _scan_vault_papers,
     find_notes_by_topic,
     find_notes_by_author,
@@ -262,7 +261,7 @@ class TestScanVaultPapers:
     def test_scans_all_papers(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = _scan_vault_papers(str(tmp_path))
         assert len(results) == 1
@@ -279,7 +278,7 @@ class TestScanVaultPapers:
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
         write_note(os.path.join(refs, 'notes.txt'), 'not markdown')
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = _scan_vault_papers(str(tmp_path))
         assert len(results) == 1
@@ -287,7 +286,7 @@ class TestScanVaultPapers:
     def test_skips_invalid_yaml(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'bad.md'), '---\n\tbad: : yaml\n---\n# Test')
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = _scan_vault_papers(str(tmp_path))
         assert len(results) == 0
@@ -298,7 +297,7 @@ class TestScanVaultPapers:
         write_note(os.path.join(refs, 'paper2.md'),
                    FULL_NOTE.replace('1706.03762', '2301.12345').replace(
                        'Attention Is All You Need', 'Another Paper'))
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = _scan_vault_papers(str(tmp_path))
         assert len(results) == 2
@@ -312,7 +311,7 @@ class TestFindNotesByTopic:
     def test_matches_title_keyword(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_topic('attention', str(tmp_path))
         assert len(results) == 1
@@ -320,7 +319,7 @@ class TestFindNotesByTopic:
     def test_matches_tag_keyword(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_topic('transformer', str(tmp_path))
         assert len(results) == 1
@@ -328,7 +327,7 @@ class TestFindNotesByTopic:
     def test_no_match_returns_empty(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_topic('quantum computing', str(tmp_path))
         assert results == []
@@ -336,7 +335,7 @@ class TestFindNotesByTopic:
     def test_multi_keyword_any_match(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_topic('quantum attention', str(tmp_path))
         assert len(results) == 1
@@ -345,7 +344,7 @@ class TestFindNotesByTopic:
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
         write_note(os.path.join(refs, 'paper2.md'), SUMMARY_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_topic('egocentric', str(tmp_path))
         assert len(results) == 1
@@ -354,7 +353,7 @@ class TestFindNotesByTopic:
     def test_result_has_relevance_scores(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_topic('attention', str(tmp_path))
         assert len(results) == 1
@@ -364,7 +363,7 @@ class TestFindNotesByTopic:
     def test_relevance_medium_for_tags_only(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_topic('transformer', str(tmp_path))
         assert len(results) == 1
@@ -373,7 +372,7 @@ class TestFindNotesByTopic:
     def test_ghost_keyword_no_match(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), GHOST_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_topic('nonexistent_keyword_xyz', str(tmp_path))
         assert results == []
@@ -387,7 +386,7 @@ class TestFindNotesByAuthor:
     def test_matches_full_name(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_author('Vaswani', str(tmp_path))
         assert len(results) == 1
@@ -395,7 +394,7 @@ class TestFindNotesByAuthor:
     def test_case_insensitive(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_author('vaswani', str(tmp_path))
         assert len(results) == 1
@@ -403,7 +402,7 @@ class TestFindNotesByAuthor:
     def test_no_match_returns_empty(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'), FULL_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
         results = find_notes_by_author('Einstein', str(tmp_path))
         assert results == []
@@ -549,7 +548,7 @@ class TestBuildSynthesisNote:
         write_note(papers[0]['filepath'], FULL_NOTE)
 
         content, filepath = build_synthesis_note('Transformer', papers, 'topic', str(tmp_path))
-        assert '文献综述' in filepath
+        assert 'AI 综述' in filepath
         assert 'Transformer' in content
         assert 'Attention Is All You Need' in content
         assert 'LLM_SYNTHESIS_PLACEHOLDER' in content
@@ -573,7 +572,7 @@ class TestBuildSynthesisNote:
         write_note(papers[0]['filepath'], FULL_NOTE)
 
         content, filepath = build_synthesis_note('Ashish Vaswani', papers, 'author', str(tmp_path))
-        assert '文献分析' in filepath
+        assert 'AI 综述' in filepath
         assert 'Ashish Vaswani' in content
 
     def test_sanitizes_topic_in_filename(self, tmp_path):
@@ -648,9 +647,9 @@ class TestIntegration:
         write_note(os.path.join(refs, 'paper_tier2.md'), OVERVIEW_ONLY_NOTE)
         write_note(os.path.join(refs, 'paper_tier3.md'), ABSTRACT_ONLY_NOTE)
 
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
-        monkeypatch.setattr('literature_analyzer.VAULT_OUTPUT_AREA',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_OUTPUT_AREA',
                            os.path.relpath(output_dir, str(tmp_path)))
 
         # Search
@@ -669,17 +668,17 @@ class TestIntegration:
 
         # Build note scaffold
         content, filepath = build_synthesis_note('Test Topic', results, 'topic', str(tmp_path))
-        assert os.path.basename(filepath).startswith('Test Topic')
-        assert '文献综述' in filepath
+        assert 'AI 综述' in os.path.basename(filepath)
+        assert 'Test Topic' in os.path.basename(filepath)
         assert '<!-- LLM_SYNTHESIS_PLACEHOLDER -->' in content
 
     def test_synthesis_note_valid_markdown(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         output_dir = os.path.join(str(tmp_path), '200 Areas', '深度学习')
         write_note(os.path.join(refs, 'p1.md'), FULL_NOTE)
-        monkeypatch.setattr('literature_analyzer.VAULT_REFERENCES',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_REFERENCES',
                            os.path.relpath(refs, str(tmp_path)))
-        monkeypatch.setattr('literature_analyzer.VAULT_OUTPUT_AREA',
+        monkeypatch.setattr('alphaxiv_workflow.synthesis.VAULT_OUTPUT_AREA',
                            os.path.relpath(output_dir, str(tmp_path)))
 
         papers = find_notes_by_topic('attention', str(tmp_path))

@@ -10,8 +10,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-from alphaxiv_client import (
+from alphaxiv_workflow.api import (
     _parse_venue_from_ref,
     _detect_presentation_type,
     _extract_venue_from_text,

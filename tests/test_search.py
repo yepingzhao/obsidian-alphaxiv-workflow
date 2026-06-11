@@ -1,5 +1,5 @@
 """
-Tests for gate1_search.py — table building, JSON export,
+Tests for gate01_search.py — table building, JSON export,
 progress logging, and pipeline stages (with mocked external APIs).
 """
 import asyncio
@@ -10,8 +10,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-from gate1_search import (
+from alphaxiv_workflow.search import (
     build_table,
     export_json,
     check_overview_async,
@@ -213,7 +212,7 @@ class TestCheckOverviewAsync:
 
     def test_returns_none_when_api_fails(self):
         async def run():
-            with patch('gate1_search.get_overview', side_effect=Exception('404')):
+            with patch('alphaxiv_workflow.search.get_overview', side_effect=Exception('404')):
                 return await check_overview_async('test-id')
 
         result = asyncio.run(run())
@@ -238,7 +237,7 @@ class TestFetchRankingAsync:
         sem = asyncio.Semaphore(1)
 
         async def run():
-            with patch('gate1_search.get_venue_ranking', return_value={'ccf': 'A'}) as mock_rank:
+            with patch('alphaxiv_workflow.search.get_venue_ranking', return_value={'ccf': 'A'}) as mock_rank:
                 result = await fetch_ranking_async('NeurIPS 2020', sem)
                 mock_rank.assert_called_once_with('NeurIPS')
                 return result
@@ -250,7 +249,7 @@ class TestFetchRankingAsync:
         sem = asyncio.Semaphore(1)
 
         async def run():
-            with patch('gate1_search.get_venue_ranking', return_value={}) as mock_rank:
+            with patch('alphaxiv_workflow.search.get_venue_ranking', return_value={}) as mock_rank:
                 result = await fetch_ranking_async('  ICML 2023  ', sem)
                 mock_rank.assert_called_once_with('ICML')
                 return result

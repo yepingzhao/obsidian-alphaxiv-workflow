@@ -7,8 +7,7 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-from note_builder import (
+from alphaxiv_workflow.note_builder import (
     clean_title,
     sanitize_filename,
     demote_headings,
@@ -92,27 +91,35 @@ class TestSanitizeFilename:
 # ──────────────────────────────────────────────────────────────────
 
 class TestDemoteHeadings:
-    def test_demotes_h1(self):
-        assert demote_headings('# Title') == '## Title'
+    def test_demotes_h1_under_h2_parent(self):
+        """H1 shifts to H3 when nesting under H2 parent (add_levels=2)."""
+        assert demote_headings('# Title') == '### Title'
 
-    def test_demotes_h2(self):
+    def test_demotes_h2_under_h2_parent(self):
+        """H2 shifts to H3 when nesting under H2 parent (add_levels=1)."""
         assert demote_headings('## Section') == '### Section'
 
-    def test_demotes_h3(self):
-        assert demote_headings('### Subsection') == '#### Subsection'
+    def test_demotes_h3_under_h2_parent(self):
+        """H3 stays at H3 when already deeper than H2 parent (add_levels=0)."""
+        assert demote_headings('### Subsection') == '### Subsection'
 
-    def test_multiple_headings(self):
+    def test_multiple_headings_under_h2_parent(self):
+        """All headings shift so shallowest lands at H3 under H2 parent."""
         text = '# Main\nSome text\n## Sub\nMore text\n### Deep'
         result = demote_headings(text)
-        assert '## Main' in result
-        assert '### Sub' in result
-        assert '#### Deep' in result
+        assert '### Main' in result
+        assert '#### Sub' in result
+        assert '##### Deep' in result
 
     def test_preserves_non_headings(self):
         text = 'plain text\n# heading\nmore plain'
         result = demote_headings(text)
         assert 'plain text' in result
         assert 'more plain' in result
+
+    def test_custom_under_level(self):
+        """under_level=1 nests shallowest heading at H2."""
+        assert demote_headings('# Title', under_level=1) == '## Title'
 
 
 # ──────────────────────────────────────────────────────────────────

@@ -8,8 +8,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-from backfill_overviews import scan_pending, update_note, get_overview_with_retry
+from alphaxiv_workflow.backfill import scan_pending, update_note, get_overview_with_retry
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -70,7 +69,7 @@ class TestScanPending:
     def test_finds_pending_paper(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         write_note(os.path.join(refs, 'paper1.md'))
-        monkeypatch.setattr('backfill_overviews.PAPERS_DIR', refs)
+        monkeypatch.setattr('alphaxiv_workflow.backfill.PAPERS_DIR', refs)
         results = scan_pending()
         assert len(results) == 1
         assert results[0]['arxiv_id'] == '1706.03762'
@@ -80,13 +79,13 @@ class TestScanPending:
         refs = os.path.join(str(tmp_path), '300 Resources', '320 References')
         content = PENDING_NOTE.replace('blog_status: pending', 'blog_status: done')
         write_note(os.path.join(refs, 'paper1.md'), content)
-        monkeypatch.setattr('backfill_overviews.PAPERS_DIR', refs)
+        monkeypatch.setattr('alphaxiv_workflow.backfill.PAPERS_DIR', refs)
         results = scan_pending()
         assert len(results) == 0
 
     def test_handles_missing_dir(self, tmp_path, monkeypatch):
         refs = os.path.join(str(tmp_path), 'nonexistent')
-        monkeypatch.setattr('backfill_overviews.PAPERS_DIR', refs)
+        monkeypatch.setattr('alphaxiv_workflow.backfill.PAPERS_DIR', refs)
         results = scan_pending()
         assert results == []
 
@@ -95,7 +94,7 @@ class TestScanPending:
         write_note(os.path.join(refs, 'paper1.md'))
         write_note(os.path.join(refs, 'notes.txt'),
                    'blog_status: pending\narxiv_id: "1234.56789"')
-        monkeypatch.setattr('backfill_overviews.PAPERS_DIR', refs)
+        monkeypatch.setattr('alphaxiv_workflow.backfill.PAPERS_DIR', refs)
         results = scan_pending()
         assert len(results) == 1
 
@@ -124,7 +123,7 @@ pending
 citations
 """
         write_note(os.path.join(refs, 'paper1.md'), content)
-        monkeypatch.setattr('backfill_overviews.PAPERS_DIR', refs)
+        monkeypatch.setattr('alphaxiv_workflow.backfill.PAPERS_DIR', refs)
         results = scan_pending()
         assert len(results) == 1
         assert results[0]['title'] == 'Simple Title Without Quotes'
@@ -154,7 +153,7 @@ pending
 citations
 """
         write_note(os.path.join(refs, 'paper1.md'), content)
-        monkeypatch.setattr('backfill_overviews.PAPERS_DIR', refs)
+        monkeypatch.setattr('alphaxiv_workflow.backfill.PAPERS_DIR', refs)
         results = scan_pending()
         assert len(results) == 1
         # YAML parses 2301.12345 as float — str conversion needed for arxiv_id
@@ -170,7 +169,7 @@ blog_status: pending
 # Test
 """
         write_note(os.path.join(refs, 'paper1.md'), content)
-        monkeypatch.setattr('backfill_overviews.PAPERS_DIR', refs)
+        monkeypatch.setattr('alphaxiv_workflow.backfill.PAPERS_DIR', refs)
         results = scan_pending()
         assert len(results) == 0
 
@@ -180,7 +179,7 @@ blog_status: pending
         content2 = PENDING_NOTE.replace('1706.03762', '2301.12345').replace(
             'Attention Is All You Need', 'Another Paper')
         write_note(os.path.join(refs, 'paper2.md'), content2)
-        monkeypatch.setattr('backfill_overviews.PAPERS_DIR', refs)
+        monkeypatch.setattr('alphaxiv_workflow.backfill.PAPERS_DIR', refs)
         results = scan_pending()
         assert len(results) == 2
         ids = {r['arxiv_id'] for r in results}
@@ -315,21 +314,21 @@ citations
 class TestGetOverviewWithRetry:
     def test_returns_on_first_success(self):
         mock = MagicMock(return_value=MagicMock())
-        with patch('backfill_overviews.get_overview', mock):
+        with patch('alphaxiv_workflow.backfill.get_overview', mock):
             result = get_overview_with_retry('v1', 'zh')
             assert result is not None
             assert mock.call_count == 1
 
     def test_retries_on_failure(self):
         mock = MagicMock(side_effect=[Exception('timeout'), Exception('timeout'), MagicMock()])
-        with patch('backfill_overviews.get_overview', mock):
+        with patch('alphaxiv_workflow.backfill.get_overview', mock):
             result = get_overview_with_retry('v1', 'zh', max_retries=3)
             assert result is not None
             assert mock.call_count == 3
 
     def test_returns_none_after_max_retries(self):
         mock = MagicMock(side_effect=Exception('timeout'))
-        with patch('backfill_overviews.get_overview', mock):
+        with patch('alphaxiv_workflow.backfill.get_overview', mock):
             result = get_overview_with_retry('v1', 'zh', max_retries=3)
             assert result is None
             assert mock.call_count == 3
@@ -337,7 +336,7 @@ class TestGetOverviewWithRetry:
     def test_retries_with_default_count(self):
         """Default max_retries=3: 3 attempts, then None."""
         mock = MagicMock(side_effect=Exception('error'))
-        with patch('backfill_overviews.get_overview', mock):
+        with patch('alphaxiv_workflow.backfill.get_overview', mock):
             result = get_overview_with_retry('v1', 'en')
             assert result is None
             assert mock.call_count == 3

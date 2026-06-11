@@ -8,8 +8,7 @@ import re
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-from validator import (
+from alphaxiv_workflow.validate import (
     validate_frontmatter,
     check_heading_hierarchy,
     check_duplicates,
