@@ -18,6 +18,9 @@ build/
 # Generated plans (superpowers)
 docs/superpowers/
 
+# Playwright MCP
+.playwright-mcp/
+
 # OS
 .DS_Store
 Thumbs.db
