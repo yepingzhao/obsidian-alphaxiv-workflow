@@ -21,6 +21,7 @@ from prettytable import PrettyTable
 from .api import (
     search_papers,
     search_with_operators,
+    search_with_session_dedup,
     enrich_search_results,
     fetch_publication_info_batch,
     rate_paper_quality,
@@ -164,19 +165,24 @@ async def process_paper(
     return result
 
 
-async def main_async(query: str, vault_path: str, limit: int = 10):
+async def main_async(query: str, vault_path: str, limit: int = 10, exclude_ids: set = None):
     """Main async pipeline: search → batch arXiv → parallel pipeline → table output.
 
     Returns list of processed paper dicts, or None if no results found.
     """
-    # ── Phase 1: Search (with boolean operator support) ──
+    exclude = exclude_ids or set()
+    # ── Phase 1: Search (with boolean operator support + round dedup) ──
     log(f'🔍 搜索中: "{query}"')
     t0 = datetime.now()
-    results, qinfo = search_with_operators(query, limit=limit)
+    results, qinfo, skipped = _search_with_exclude(query, exclude, limit=limit)
+    if skipped:
+        log(f'  ℹ️  跳过 {skipped} 篇前轮已出现的论文')
     if qinfo.get('error'):
         log(f'  ⚠️  布尔检索解析失败: {qinfo["error"]}')
         log(f'  ℹ️  已回退至普通搜索')
     if not results:
+        if skipped:
+            log('⚠️ 所有新结果均已被前轮搜索覆盖，尝试放宽检索词或移除排除条件。')
         if qinfo.get('operators_used'):
             log(f'  ℹ️  布尔检索解析: {qinfo.get("parsed", "")}')
         log('❌ 未找到结果。请尝试更短的查询或直接输入 arXiv ID。')
@@ -219,6 +225,33 @@ async def main_async(query: str, vault_path: str, limit: int = 10):
         p['rating_display'] = rating_display
 
     return processed
+
+
+def _search_with_exclude(query: str, exclude_ids: set, limit: int = 10) -> tuple:
+    """Search AlphaXiv and filter out papers in exclude_ids.
+
+    Wrapper around search_with_operators that post-filters against a
+    blacklist set. Uses search_with_session_dedup for the actual API
+    call + filtering logic.
+
+    Returns (results, query_info, skipped_count).
+    """
+    results, qinfo = search_with_operators(query, limit=max(limit * 3, 30))
+    if not exclude_ids:
+        return results[:limit], qinfo, 0
+
+    filtered = []
+    skipped = 0
+    for r in results:
+        aid = r.paper_id if hasattr(r, 'paper_id') else r.get('paper_id', '')
+        if aid in exclude_ids:
+            skipped += 1
+            continue
+        filtered.append(r)
+        if len(filtered) >= limit:
+            break
+
+    return filtered, qinfo, skipped
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -360,14 +393,31 @@ def main():
         '--data-file',
         help='Save processed data as JSON to this file (for AI handoff)'
     )
+    parser.add_argument(
+        '--exclude',
+        help='JSON file with {arxiv_id: true} map of papers to exclude (from previous rounds)'
+    )
+    parser.add_argument(
+        '--exclude',
+        help='JSON file with {arxiv_id: true} map of papers to exclude (from previous rounds)'
+    )
     args = parser.parse_args()
+
+    # Load exclude map
+    exclude_ids = set()
+    if args.exclude and os.path.exists(args.exclude):
+        try:
+            with open(args.exclude, 'r') as f:
+                exclude_ids = set(json.load(f).keys())
+        except (json.JSONDecodeError, OSError):
+            pass
 
     # JSON mode: redirect progress logs to stderr to keep stdout clean
     if args.json:
         global _log_stream
         _log_stream = sys.stderr
 
-    processed = asyncio.run(main_async(args.query, args.vault_path, args.limit))
+    processed = asyncio.run(main_async(args.query, args.vault_path, args.limit, exclude_ids))
 
     if processed is None:
         sys.exit(1)

@@ -505,6 +505,48 @@ def check_vault_for_papers(vault_path: str, arxiv_ids: list) -> dict:
     return {aid: index[aid] for aid in arxiv_ids if aid in index}
 
 
+def search_with_session_dedup(query: str, exclude_ids: set = None, limit: int = 10,
+                               vault_path: str = None) -> tuple:
+    """Search with automatic dedup against previous rounds and vault.
+
+    Filters out papers that appeared in a previous round's results or
+    are already saved to the vault. Uses separate API calls to maintain
+    clean result separation per round — no merging of results from
+    different search queries.
+
+    Args:
+        query: Search query string
+        exclude_ids: Set of arXiv IDs to exclude (from previous rounds)
+        limit: Maximum results to return AFTER dedup
+        vault_path: Optional vault path for vault-level dedup
+
+    Returns:
+        (results, query_info, skipped_count) — results is always from
+        the current query only; previous-round papers are filtered, not mixed.
+    """
+    exclude = set(exclude_ids) if exclude_ids else set()
+    if vault_path and VAULT_PATH:
+        vault_existing = _scan_vault_index(vault_path or VAULT_PATH)
+        exclude.update(vault_existing.keys())
+
+    # Fetch more to account for filtering
+    fetch_limit = max(limit * 3, 30)
+    results, qinfo = search_with_operators(query, limit=fetch_limit)
+
+    filtered = []
+    skipped = 0
+    for r in results:
+        aid = r.paper_id if hasattr(r, 'paper_id') else r.get('paper_id', '')
+        if aid in exclude:
+            skipped += 1
+            continue
+        filtered.append(r)
+        if len(filtered) >= limit:
+            break
+
+    return filtered, qinfo, skipped
+
+
 # ──────────────────────────────────────────────────────────────────
 # Paper quality & influence assessment
 # ──────────────────────────────────────────────────────────────────

@@ -25,11 +25,13 @@ Routes user intent to the appropriate sub-skill pipeline. No side effects — ea
 User input → 01-search-disambiguate → 02-build-note → 03-validate-import → auto-backfill
 ```
 
-**REQUIRED SUB-SKILL:** Load `skills/01-search-disambiguate/SKILL.md` — Gate 1: Search with boolean operators, present candidates, handle selection.
+**REQUIRED SUB-SKILL:** Load `skills/01-search-disambiguate/SKILL.md` — Gate 1: Search with boolean operators, present candidates per round, handle cross-round dedup via `--exclude` flag.
 
 **REQUIRED SUB-SKILL:** Load `skills/02-build-note/SKILL.md` — Gate 2: Fetch metadata + AI overview, construct markdown note.
 
 **REQUIRED SUB-SKILL:** Load `skills/03-validate-import/SKILL.md` — Gate 3: Validate frontmatter + headings, generate tags, check duplicates.
+
+**Gate 1 Multi-Round Safety:** Each `import` session creates a unique working directory (`/tmp/alphaxiv-session-<ts>/` or `%TEMP%\alphaxiv-session-<ts>/`). Round-N results go to `round-N-data.json`. An `exclude.json` map accumulates all previously-seen arXiv IDs and is passed via `--exclude` to subsequent rounds, preventing result mixing.
 
 **Post-Import Auto-Backfill:** After all papers pass Gate 3, automatically run:
 ```bash
