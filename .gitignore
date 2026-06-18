@@ -21,6 +21,9 @@ docs/superpowers/
 # Playwright MCP
 .playwright-mcp/
 
+# Autoresearch output
+autoresearch-*/
+
 # OS
 .DS_Store
 Thumbs.db

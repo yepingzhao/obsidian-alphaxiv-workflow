@@ -445,3 +445,105 @@ def fetch_publication_rank(published_venue: str) -> dict:
         return extract_ranking_fields(None) if extract_ranking_fields else {}
 
     return get_venue_ranking(normalized)
+
+
+_JOURNAL_NAMES = {
+    'tpami', 'tmi', 'tip', 'tifs', 'tit', 'tsp', 'tac', 'tnnls',
+    'jmlr', 'journal of machine learning research',
+    'ijcv', 'international journal of computer vision',
+    'ieee transactions on pattern analysis and machine intelligence',
+    'ieee transactions on medical imaging',
+    'ieee transactions on image processing',
+    'ieee transactions on knowledge and data engineering',
+    'ieee transactions on neural networks and learning systems',
+    'ieee transactions on robotics',
+    'ieee transactions on information theory',
+    'ieee transactions on signal processing',
+    'ieee transactions on visualization and computer graphics',
+    'ieee access',
+    'ijrr', 'international journal of robotics research',
+    'nature', 'nature machine intelligence', 'nature communications',
+    'nature methods', 'nature neuroscience', 'nature medicine',
+    'nature electronics', 'nature photonics', 'nature materials',
+    'nature computational science',
+    'science', 'science advances', 'science robotics',
+    'science translational medicine',
+    'pnas', 'proceedings of the national academy of sciences',
+    'cell', 'cell reports', 'cell systems', 'neuron',
+    'machine learning', 'artificial intelligence',
+    'neural computation', 'neural networks',
+    'pattern recognition', 'neurocomputing',
+    'computational linguistics', 'neural information processing systems',
+    'acm transactions on graphics', 'acm transactions on computer-human interaction',
+    'acm computing surveys',
+    'lancet', 'lancet digital health',
+    'radiology', 'medical image analysis', 'neuroimage',
+    'bioinformatics', 'plos computational biology',
+    'plos one', 'scientific reports', 'scientific data',
+    'physical review letters', 'physical review',
+    'computer graphics forum',
+    'sensors', 'remote sensing',
+    'information fusion', 'knowledge-based systems',
+    'expert systems with applications',
+    'engineering applications of artificial intelligence',
+}
+
+_JOURNAL_PATTERNS = [
+    r'\b(?:journal|transactions|annals|quarterly|review)\b',
+    r'\b(?:press|publishing|verlag|springer|elsevier|wiley)\b',
+    r'\b(?:ieee|acm)\b.*\btransactions\b',
+]
+
+_CONFERENCE_ACRONYMS = {
+    'neurips', 'nips', 'icml', 'iclr', 'cvpr', 'iccv', 'eccv',
+    'acl', 'emnlp', 'naacl', 'coling',
+    'aaai', 'ijcai', 'kdd', 'sigir', 'wsdm', 'www', 'recsys',
+    'sigmod', 'vldb', 'icde', 'icdm',
+    'osdi', 'nsdi', 'sosp', 'isca', 'micro', 'hpca',
+    'chi', 'uist', 'cscw', 'ubicomp', 'mobicom', 'sensys',
+    'icra', 'iros', 'rss', 'corl', 'aistats', 'uai', 'aamas',
+    'eacl', 'conll', 'interspeech',
+}
+
+_CONFERENCE_PATTERNS = [
+    r'\binternational conference\b', r'\bconference on\b',
+    r'\bannual meeting\b', r'\bproceedings of the\b',
+    r'\baccepted at\b', r'\bpresented at\b',
+]
+
+_WORKSHOP_PATTERNS = [
+    r'\bworkshop\b', r'\bwip\b', r'\bwork in progress\b',
+    r'\bposter\b', r'\bdemo\b', r'\bdoctoral consortium\b',
+]
+
+
+def classify_venue_type(venue: str) -> str | None:
+    """Classify venue as 'conference', 'journal', or 'workshop'."""
+    if not venue or not venue.strip():
+        return None
+    venue_lower = venue.strip().lower()
+    venue_no_year = re.sub(r'\b20\d{2}\b', '', venue_lower).strip()
+    for pat in _WORKSHOP_PATTERNS:
+        if re.search(pat, venue_no_year, re.IGNORECASE):
+            return 'workshop'
+    abbrev = venue_no_year.split()[0] if venue_no_year else ''
+    if abbrev in _JOURNAL_NAMES or venue_no_year in _JOURNAL_NAMES:
+        return 'journal'
+    for pat in _JOURNAL_PATTERNS:
+        if re.search(pat, venue_no_year, re.IGNORECASE):
+            return 'journal'
+    if abbrev in _CONFERENCE_ACRONYMS:
+        return 'conference'
+    for pat in _CONFERENCE_PATTERNS:
+        if re.search(pat, venue_no_year, re.IGNORECASE):
+            return 'conference'
+    return None
+
+
+def extract_pub_year(venue: str) -> str | None:
+    """Extract publication year from formatted venue string.
+    Input: 'NeurIPS 2020' → '2020', 'TPAMI' → None."""
+    if not venue:
+        return None
+    matches = re.findall(r'\b(20\d{2})\b', venue)
+    return matches[-1] if matches else None

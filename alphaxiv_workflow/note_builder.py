@@ -6,6 +6,34 @@ import re
 import os
 from datetime import datetime
 
+from .venue import classify_venue_type, extract_pub_year
+
+
+def parse_bibtex_pub_fields(bibtex: str) -> dict:
+    """Parse BibTeX for publication info fields not covered by arXiv API.
+
+    Extracts: booktitle, journal, year, publisher, school, volume, number, pages.
+    These serve as Source 5 fallback when arXiv API provides no venue.
+
+    Returns dict with: bib_booktitle, bib_journal, bib_year, bib_publisher,
+        bib_school, bib_volume, bib_number, bib_pages.
+    All None when BibTeX is empty or unparseable.
+    """
+    result = {
+        'bib_booktitle': None, 'bib_journal': None, 'bib_year': None,
+        'bib_publisher': None, 'bib_school': None,
+        'bib_volume': None, 'bib_number': None, 'bib_pages': None,
+    }
+    if not bibtex:
+        return result
+    for key in result:
+        field = key.removeprefix('bib_')
+        m = re.search(rf'{field}\s*=\s*\{{(.+?)\}}', bibtex)
+        if m:
+            result[key] = m.group(1).strip()
+    return result
+
+
 # arXiv category mapping for readable tags
 CATEGORY_MAP = {
     "cs.CL": "nlp", "cs.AI": "ai", "cs.LG": "machine-learning",
@@ -262,6 +290,24 @@ def build_note(metadata, overview_zh, overview_en=None, pub_info=None, pub_rank=
     presentation_type = pub.get('presentation_type') or ''
     formal_pub_date = pub.get('published_date') or ''
 
+    # BibTeX fallback for missing venue (Source 5)
+    bib_fields = parse_bibtex_pub_fields(bibtex)
+    if not published_venue:
+        bib_venue = bib_fields.get('bib_booktitle') or bib_fields.get('bib_journal')
+        if bib_venue:
+            bib_year = bib_fields.get('bib_year')
+            published_venue = f'{bib_venue} {bib_year}'.strip() if bib_year else bib_venue
+        elif bib_fields.get('bib_school'):
+            published_venue = bib_fields.get('bib_school')
+
+    # Venue type classification
+    venue_type = classify_venue_type(published_venue) if published_venue else None
+
+    # Extract pub year from venue (NeurIPS 2020 → 2020) — fallback for formal_pub_date
+    venue_pub_year = extract_pub_year(published_venue) if published_venue else None
+    if not formal_pub_date and venue_pub_year:
+        formal_pub_date = venue_pub_year
+
     # Degradation: Chinese overview empty -> try English
     blog_pending = False
     overview_text = zh_overview
@@ -294,6 +340,8 @@ def build_note(metadata, overview_zh, overview_en=None, pub_info=None, pub_rank=
         pub_yaml_lines += f'presentation_type: "{presentation_type}"\n'
     if formal_pub_date:
         pub_yaml_lines += f'published_date: {formal_pub_date}\n'
+    if venue_type:
+        pub_yaml_lines += f'venue_type: {venue_type}\n'
 
     # Build ranking YAML lines (only when data exists)
     rank_yaml_lines = ''
@@ -338,6 +386,8 @@ created: {now_str}
         pub_badge = f'{published_venue}'
         if presentation_type:
             pub_badge += f' ({presentation_type})'
+        if venue_type and venue_type not in str(pub_badge).lower():
+            pub_badge += f' [{venue_type}]'
         info_bar += f' | **Venue**: {pub_badge}'
 
     # Ranking badges (CCF + SCI/CAS)

@@ -60,6 +60,34 @@ Configuration via `OBSIDIAN_VAULT_PATH` env var or `~/.alphaxiv-to-obsidian.json
 EasyScholar ranking requires `easyscholar_secret_key` in config (optional).
 Papers saved to `300 Resources/320 References/`. Synthesis to `200 Areas/深度学习/`.
 
+## Publication Info Sources
+
+Multi-source fallback for publication metadata (handled by Gate 2's `note_builder`):
+
+| Priority | Source | Example |
+|----------|--------|---------|
+| 1 | arXiv API `<journal_ref>` | "Published in NeurIPS 2024" |
+| 2 | arXiv API `<comment>` | "Accepted at ICML 2023 (Oral)" |
+| 3 | Abstract text parsing | "Published as a conference paper at ICLR 2024" |
+| 4 | EasyScholar API | Conference/journal ranking (CCF, CORE, etc.) |
+| 5 | BibTeX fields | `booktitle`, `journal`, `year`, `publisher` |
+
+**Frontmatter fields output:**
+
+| Field | Type | Example |
+|-------|------|---------|
+| `published_venue` | str | `"NeurIPS 2020"`, `"Nature Machine Intelligence 2023"` |
+| `published_date` | str | `"2020-12-06"` — formal pub date (from venue year if arXiv date unavailable) |
+| `presentation_type` | str | `"Oral"`, `"Spotlight"` — detected from arXiv comment |
+| `venue_type` | str | `"conference"`, `"journal"`, `"workshop"` — auto-classified |
+| `ccf`, `sci_jcr`, etc. | str/bool | Ranking from EasyScholar |
+
+**Date resolution priority:** arXiv `<published>` → venue year (e.g. "NeurIPS 2020" → 2020) → BibTeX `year`
+
+**Venue type classification:** Uses known name sets + pattern matching to distinguish conference/journal/workshop. Falls back to BibTeX `booktitle` (→ conference) / `journal` (→ journal) when arXiv has no venue.
+
+`published_venue` and `published_date` are always preferred from higher-priority sources. Missing values degrade gracefully — left empty rather than guessed.
+
 ## Note Format
 
 All imported papers follow this canonical structure:
