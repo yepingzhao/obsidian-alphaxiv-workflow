@@ -1,18 +1,15 @@
----
-name: 02-build-note
-description: Use when confirmed arXiv paper metadata is ready from Gate 1 and need to fetch AlphaXiv data and construct a structured Obsidian markdown note for import.
----
-
 # Build Note (Gate 2)
 
 Fetch full paper data from AlphaXiv and construct a structured Obsidian markdown note.
+
+Read [note-schema.md](note-schema.md) before constructing or modifying note content.
 
 ## Process
 
 ### Step 1: Build Note
 
 ```bash
-python -m alphaxiv_workflow.build "<paper title or arXiv ID>"
+<PYTHON_CMD> -m alphaxiv_workflow.build "<paper title or arXiv ID>"
 ```
 
 This CLI handles the full pipeline:
@@ -61,7 +58,7 @@ Multi-source fallback for publication info:
 
 ## Handoff
 
-Pass filepath to **03-validate-import** (REQUIRED SUB-SKILL).
+Pass the filepath to [Validate Import](validate-import.md).
 
 ## Fallback
 

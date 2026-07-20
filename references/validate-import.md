@@ -1,27 +1,24 @@
----
-name: 03-validate-import
-description: Use when a paper note has been saved to the Obsidian vault from Gate 2 and needs frontmatter validation, heading hierarchy check, duplicate detection, and intelligent tag generation.
----
-
 # Validate Import (Gate 3)
 
 Post-save validation and enrichment of imported paper notes.
+
+Validate against [note-schema.md](note-schema.md).
 
 ## Process
 
 ### Step 1: Run Full Validation
 
 ```bash
-python -m alphaxiv_workflow.validate "FILEPATH"
+<PYTHON_CMD> -m alphaxiv_workflow.validate "FILEPATH"
 ```
 
 This runs all checks: frontmatter, heading hierarchy, duplicates, and tag count. Use `--step` for single checks:
 
 ```bash
-python -m alphaxiv_workflow.validate "FILEPATH" --step frontmatter
-python -m alphaxiv_workflow.validate "FILEPATH" --step headings
-python -m alphaxiv_workflow.validate "FILEPATH" --step duplicates
-python -m alphaxiv_workflow.validate "FILEPATH" --step tags
+<PYTHON_CMD> -m alphaxiv_workflow.validate "FILEPATH" --step frontmatter
+<PYTHON_CMD> -m alphaxiv_workflow.validate "FILEPATH" --step headings
+<PYTHON_CMD> -m alphaxiv_workflow.validate "FILEPATH" --step duplicates
+<PYTHON_CMD> -m alphaxiv_workflow.validate "FILEPATH" --step tags
 ```
 
 ### Step 2: Understand Validation Levels
@@ -30,7 +27,8 @@ python -m alphaxiv_workflow.validate "FILEPATH" --step tags
 |----------|-------|--------|
 | **BLOCK** | YAML parse error | Stop, report error |
 | **BLOCK** | Missing title or arxiv_id | Stop, report error |
-| **BLOCK** | Missing required H2 (`摘要`, `AI 摘要`, `AI 综述 (中文)`, `相关引用`) | Must be added before proceeding |
+| **BLOCK** | Missing required H2 (`摘要`, `AI 综述 (中文)`, `相关引用`) | Must be added before proceeding |
+| **BLOCK** | Missing `### AI 摘要`, or `AI 摘要` uses any level other than H3 | Add or normalize the H3 heading before proceeding |
 | **WARN** | Authors list empty | Save with warning |
 | **WARN** | Tags count < 5 | Flag for tag generation |
 | **WARN** | Skipped heading level (H2→H4 without H3) | Fix heading hierarchy |
@@ -46,7 +44,7 @@ If duplicates found for the same `arxiv_id`:
 
 ### Step 4: Generate Tags
 
-Tag generation requires LLM analysis. Use Claude inline:
+Use the current model to generate tags inline:
 1. Read note content: `alphaxiv_workflow.validate.read_note_content(filepath)` → `{title, abstract, overview}`
 2. Generate 5-8 tags covering: research area, task, method, key concepts, model/architecture
 3. Tags: lowercase, kebab-case, English
@@ -70,7 +68,7 @@ Tag generation requires LLM analysis. Use Claude inline:
 
 ## Handoff
 
-After all papers pass validation, the main skill automatically triggers **Post-Import Auto-Backfill** (see `skills/05-backfill-overviews/SKILL.md`).
+After all papers pass validation, return to the root import contract. Load [Backfill Overviews](backfill-overviews.md) only if pending papers remain.
 
 ## Fallback
 

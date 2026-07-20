@@ -1,11 +1,15 @@
----
-name: 01-search-disambiguate
-description: Use when given a paper title, keyword, or arxiv_id and need to find matching papers on AlphaXiv before importing to Obsidian. Also use when user says "import hot" or "import recommend" to scrape AlphaXiv trending/recommended papers.
----
-
 # Search & Disambiguate (Gate 1)
 
 Search AlphaXiv for papers, display with publication metadata, and present candidates for user confirmation.
+
+## Contents
+
+- [Decision flowchart](#decision-flowchart)
+- [Process](#process)
+- [Common mistakes](#common-mistakes)
+- [Rules](#rules)
+- [Handoff and cleanup](#handoff)
+- [Fallback](#fallback)
 
 ## Decision Flowchart
 
@@ -19,10 +23,20 @@ User input ──┬── "import hot" ────────────> fe
 
 ### Step 1: Session Init — Create Session Directory
 
-**CRITICAL: Never reuse the same data file path across rounds.** Each import session must use a unique working directory to avoid result mixing:
+**CRITICAL: Never reuse the same data file path across rounds.** Create a unique working directory and retain its exact path for the whole import session:
 
-- Linux/Mac: `/tmp/alphaxiv-session-<timestamp>/`
-- Windows: `%TEMP%\alphaxiv-session-<timestamp>/`
+```powershell
+# PowerShell
+$sessionDir = Join-Path ([IO.Path]::GetTempPath()) ("alphaxiv-session-" + [guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $sessionDir | Out-Null
+Set-Content -LiteralPath (Join-Path $sessionDir 'exclude.json') -Value '{}'
+```
+
+```bash
+# Bash
+SESSION_DIR="$(mktemp -d -t alphaxiv-session-XXXXXXXX)"
+printf '{}' > "$SESSION_DIR/exclude.json"
+```
 
 Within each session directory:
 - `round-1-data.json` → `round-N-data.json` — per-round data files
@@ -38,45 +52,43 @@ Within each session directory:
 3. **Pass `--exclude exclude.json` on every round after the first** — this tells the CLI to filter out papers that appeared in earlier rounds
 4. **Display only current round's results** — never show a merged table mixing old and new results
 
-```bash
+```text
 # Round 1
-mkdir -p /tmp/alphaxiv-session && echo '{}' > /tmp/alphaxiv-session/exclude.json
-python -m alphaxiv_workflow.search "<query>" "<VAULT_PATH>" --data-file /tmp/alphaxiv-session/round-1-data.json
+<PYTHON_CMD> -m alphaxiv_workflow.search "<query>" "<VAULT_PATH>" --data-file "<SESSION_DIR>/round-1-data.json"
 
 # Round 2 (补充搜索) — exclude papers from round 1
-python -m alphaxiv_workflow.search "<refined query>" "<VAULT_PATH>" \
-    --data-file /tmp/alphaxiv-session/round-2-data.json \
-    --exclude /tmp/alphaxiv-session/exclude.json
+<PYTHON_CMD> -m alphaxiv_workflow.search "<refined query>" "<VAULT_PATH>" \
+    --data-file "<SESSION_DIR>/round-2-data.json" \
+    --exclude "<SESSION_DIR>/exclude.json"
 ```
 
-On Windows: `%TEMP%\alphaxiv-session\round-N-data.json`.
+Replace `<SESSION_DIR>` with `$sessionDir` in PowerShell or `$SESSION_DIR` in Bash. Use native path joining when direct filesystem tools are available; do not concatenate a Windows temp path into a workspace-relative filename.
 
 ### Step 3: Update Exclude Map After Each Round
 
-```bash
-python -c "
+```python
 import json
-with open('/tmp/alphaxiv-session/exclude.json') as f:
-    exclude = json.load(f)
-with open('/tmp/alphaxiv-session/round-N-data.json') as f:
-    papers = json.load(f)
-for p in papers:
-    exclude[p['arxiv_id']] = True
-with open('/tmp/alphaxiv-session/exclude.json', 'w') as f:
-    json.dump(exclude, f)
-"
+from pathlib import Path
+
+session_dir = Path("<SESSION_DIR>")
+exclude_path = session_dir / "exclude.json"
+round_path = session_dir / "round-N-data.json"
+exclude = json.loads(exclude_path.read_text(encoding="utf-8"))
+papers = json.loads(round_path.read_text(encoding="utf-8"))
+exclude.update({paper["arxiv_id"]: True for paper in papers})
+exclude_path.write_text(json.dumps(exclude), encoding="utf-8")
 ```
 
 ### Step 4: Hot Papers Mode
 
 ```bash
-python -m alphaxiv_workflow.fetch_hot "<VAULT_PATH>" --data-file /tmp/alphaxiv-session/hot-data.json
+<PYTHON_CMD> -m alphaxiv_workflow.fetch_hot "<VAULT_PATH>" --data-file "<SESSION_DIR>/hot-data.json"
 ```
 
 ### Step 5: Recommend Papers Mode
 
 ```bash
-python -m alphaxiv_workflow.fetch_recommend "<VAULT_PATH>" --data-file /tmp/alphaxiv-session/recommend-data.json
+<PYTHON_CMD> -m alphaxiv_workflow.fetch_recommend "<VAULT_PATH>" --data-file "<SESSION_DIR>/recommend-data.json"
 ```
 
 ### Step 6: Present Candidates Per Round
@@ -123,15 +135,15 @@ If marked `已保存 ✓`: ask skip / overwrite / open. Default: skip.
 ## Handoff
 
 Selected papers to `selections.json`: `[{"arxiv_id": "...", "title": "...", "round": N}, ...]`
-Pass to **02-build-note**.
+Pass the confirmed selection to [Build Note](build-note.md).
 
 ## Session Cleanup
 
-After Gate 3: `rm -rf /tmp/alphaxiv-session`
+After Gate 3, delete only the exact unique directory created in Step 1. Verify that its resolved basename starts with `alphaxiv-session-`; never delete the parent temp directory or a generic shared session path.
 
 ## Fallback
 
-If CLI fails, use direct Python API:
+If the CLI fails after `PYTHON_CMD` itself has passed its probe, use the same interpreter for the direct Python API fallback. Do not switch interpreters or create a fallback script merely because bare `python` failed.
 ```python
 from alphaxiv_workflow.api import search_with_operators, enrich_search_results
 results = search_with_operators("query")

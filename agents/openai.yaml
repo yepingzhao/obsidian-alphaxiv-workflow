@@ -1,0 +1,4 @@
+interface:
+  display_name: "AlphaXiv to Obsidian"
+  short_description: "Import, analyze, and plan from academic papers"
+  default_prompt: "Use $obsidian-alphaxiv-workflow to import and organize a paper in my Obsidian vault."

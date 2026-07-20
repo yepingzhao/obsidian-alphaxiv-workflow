@@ -1,18 +1,22 @@
----
-name: 05-backfill-overviews
-description: Use when paper notes have blog_status: pending and need AI overview content fetched or generated. Auto-triggered after every import; manual invocation for batch processing pre-existing pending papers.
----
-
 # Backfill Overviews
 
-Fetch missing AI overviews from AlphaXiv public API and update paper notes. For papers without existing overviews, trigger generation via Playwright browser automation.
+Fetch missing AI overviews from the AlphaXiv public API and update paper notes. For papers without existing overviews, use authenticated, Playwright-compatible browser automation when available.
+
+Preserve the structure defined in [note-schema.md](note-schema.md) when replacing placeholders.
+
+## Contents
+
+- [Fetch process](#process)
+- [Browser trigger](#browser-trigger-for-papers-without-overviews)
+- [Common mistakes](#common-mistakes)
+- [Fallback](#fallback)
 
 ## Process
 
 ### Step 1: Scan for Pending Papers
 
 ```bash
-python -m alphaxiv_workflow.backfill --dry-run
+<PYTHON_CMD> -m alphaxiv_workflow.backfill --dry-run
 ```
 
 Shows papers with `blog_status: pending` in `300 Resources/320 References/`.
@@ -20,32 +24,29 @@ Shows papers with `blog_status: pending` in `300 Resources/320 References/`.
 ### Step 2: Fetch Existing Overviews
 
 ```bash
-python -m alphaxiv_workflow.backfill --workers 3
+<PYTHON_CMD> -m alphaxiv_workflow.backfill --workers 3
 ```
 
 For each pending paper:
 1. Gets `version_id` from AlphaXiv metadata (public API, no auth needed)
-2. Tries `get_overview(version_id, 'zh')` for Chinese overview
-3. Falls back to `get_overview(version_id, 'en')` if Chinese unavailable
+2. Fetches both `get_overview(version_id, 'zh')` and `get_overview(version_id, 'en')`
+3. Prefers ZH for the detailed overview and uses EN summary data when the ZH summary is empty
 4. Updates note: replaces placeholder, removes `blog_status: pending`
 
 ### Step 3: Handle Remainders
 
 Papers still returning 404 stay `blog_status: pending`. These need generation triggered.
 
-## Playwright Trigger (for papers without overviews)
+## Browser Trigger (for papers without overviews)
 
 ### Startup
 
-Navigate to AlphaXiv to ensure logged-in browser session:
-```
-mcp__playwright__browser_navigate → https://alphaxiv.org
-```
+Use an available Playwright-compatible browser tool with the user's authenticated profile. Navigate to `https://alphaxiv.org` and verify that the session is logged in before triggering generation. If no authenticated browser automation is available, preserve pending state and tell the user how to trigger the overview manually.
 
 ### List Pending Papers
 
 ```bash
-python -m alphaxiv_workflow.trigger --batch
+<PYTHON_CMD> -m alphaxiv_workflow.trigger --batch
 ```
 
 ### Trigger Generation (per batch of 3)
@@ -75,16 +76,16 @@ for (const aid of ['id1', 'id2', 'id3']) {
 | `waitUntil: 'load'` only | `networkidle` times out on pages with persistent WS/analytics connections |
 | Wait 4-5s after navigation | AlphaXiv is a React SPA — the Generate section renders asynchronously |
 | Use `evaluate()` to find button | `getByText()`, `getByRole()` selectors are unreliable for this button |
-| Exactly 3 per batch | **NEVER exceed.** Server limit: 3 parallel generations. Exceeding triggers rate-limit error. |
+| At most 3 per batch | **NEVER exceed 3.** The server limits parallel generations; a final batch may contain 1-2 papers. |
 | Wait 3 min between batches | Generation takes ~1-2 min, wait buffer for completion |
 | Retry stubborn papers | Some papers need 2-3 retriggers before generation succeeds |
 
 ### Full Workflow
 
 1. Navigate to `https://alphaxiv.org` (ensure logged in)
-2. Run `python -m alphaxiv_workflow.trigger --batch` to get batch arrays
-3. Trigger exactly 3 papers, then **wait 3 minutes**
-4. Run `python -m alphaxiv_workflow.backfill --workers 3` to fetch and save
+2. Run `<PYTHON_CMD> -m alphaxiv_workflow.trigger --batch` to get batch arrays
+3. Trigger up to 3 papers, then **wait 3 minutes**
+4. Run `<PYTHON_CMD> -m alphaxiv_workflow.backfill --workers 3` to fetch and save
 5. Repeat until 0 pending
 
 ## Common Mistakes
@@ -95,16 +96,6 @@ for (const aid of ['id1', 'id2', 'id3']) {
 | Triggering more than 3 at once | Server hard limit. Error: "You are generating blogs too quickly." |
 | Not waiting between batches | Generation takes 1-2 min. Backfill will return 404 if run too early. |
 | Assuming no button = broken | Paper may be transferring on AlphaXiv. Wait hours/days and retry. |
-
-## Standard Note Structure
-
-After import + backfill, every note should have:
-```
-## 摘要
-## AI 摘要          (from API overview.summary)
-## AI 综述 (中文)    (from API overview.overview)
-## 相关引用         (from API overview.citations OR overview.overview tail)
-```
 
 ## Fallback
 

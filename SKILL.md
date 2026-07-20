@@ -1,134 +1,73 @@
 ---
 name: obsidian-alphaxiv-workflow
-description: Use when user wants to import academic papers from arXiv/AlphaXiv into Obsidian, requests literature analysis of saved papers, mentions paper blog or literature notes, or asks to backfill overviews for pending papers.
-argument-hint: 'import "<query>" | import hot | import recommend | analyze "<topic>" | analyze author "<name>" | backfill-overviews'
+description: Import and manage arXiv or AlphaXiv papers in an Obsidian vault, including search and disambiguation, structured note creation, validation, pending-overview backfill, literature synthesis, and research-plan brainstorming grounded in saved papers. Use when the user mentions importing papers, AlphaXiv blogs or overviews, Obsidian literature notes, analyzing papers by topic or author, filling pending paper notes, or drafting a cited research plan from the vault. Route `import`, `analyze`, `backfill-overviews`, and `plan` requests to the matching sub-skill.
 ---
 
 # AlphaXiv to Obsidian
 
-Routes user intent to the appropriate sub-skill pipeline. No side effects — each sub-skill manages its own dependencies.
+Route the request to one workflow. Load only the listed sub-skills and references; do not preload every pipeline.
 
-## Sub-Commands
+## Establish Context
 
-| Command | Pipeline | Purpose |
-|---------|----------|---------|
-| `import "<query>"` | Gate 1 → 2 → 3 → Auto-Backfill | Search, fetch, save, then auto-fetch overviews |
-| `import hot` | Gate 1h → 2 → 3 → Auto-Backfill | Scrape AlphaXiv trending papers, then import |
-| `import recommend` | Gate 1r → 2 → 3 → Auto-Backfill | Scrape AlphaXiv recommended papers, then import |
-| `analyze "<topic>"` | Gate 4 | LLM five-chapter synthesis by topic |
-| `analyze author "<name>"` | Gate 4 | LLM five-chapter synthesis by author |
-| `backfill-overviews` | Backfill Pipeline (manual) | Manual batch fetch of all pending papers |
+1. Resolve `SKILL_ROOT` as the directory containing this file.
+2. Resolve `PYTHON_CMD` once for the session. Probe the interpreter with `<candidate> -c "print('ok')"` and require exit code 0. On Windows, if bare `python` fails, enumerate candidates with `Get-Command python -All` or `where.exe python`, probe each exact executable path, and use the first working Python 3.11+ interpreter. Also try `py -3` when available. On other platforms, try `python3` after `python`. A WindowsApps alias that returns nonzero is not a package or AlphaXiv failure; do not install or debug the package through it.
+3. Resolve `VAULT_PATH` from the explicit user value, then `OBSIDIAN_VAULT_PATH`, then `~/.alphaxiv-to-obsidian.json`.
+4. Before writing, verify that `VAULT_PATH` exists. Never treat a missing or malformed Windows path as workspace-relative.
 
-## Import Pipeline
+Keep the verified invocation as `PYTHON_CMD` and substitute it for every `<PYTHON_CMD>` below and in workflow references. Use the same interpreter for package installation so `pip` and runtime cannot diverge. Run all module commands with `SKILL_ROOT` as the working directory.
 
-```
-User input → 01-search-disambiguate → 02-build-note → 03-validate-import → auto-backfill
-```
-
-**REQUIRED SUB-SKILL:** Load `skills/01-search-disambiguate/SKILL.md` — Gate 1: Search with boolean operators, present candidates per round, handle cross-round dedup via `--exclude` flag.
-
-**REQUIRED SUB-SKILL:** Load `skills/02-build-note/SKILL.md` — Gate 2: Fetch metadata + AI overview, construct markdown note.
-
-**REQUIRED SUB-SKILL:** Load `skills/03-validate-import/SKILL.md` — Gate 3: Validate frontmatter + headings, generate tags, check duplicates.
-
-**Gate 1 Multi-Round Safety:** Each `import` session creates a unique working directory (`/tmp/alphaxiv-session-<ts>/` or `%TEMP%\alphaxiv-session-<ts>/`). Round-N results go to `round-N-data.json`. An `exclude.json` map accumulates all previously-seen arXiv IDs and is passed via `--exclude` to subsequent rounds, preventing result mixing.
-
-**Post-Import Auto-Backfill:** After all papers pass Gate 3, automatically run:
-```bash
-python -m alphaxiv_workflow.backfill --workers 3
-python -m alphaxiv_workflow.backfill --dry-run
-```
-If papers remain pending, load `skills/05-backfill-overviews/SKILL.md` for Playwright trigger workflow, then re-run backfill. Finish with:
-```bash
-python -m alphaxiv_workflow.unify --phase 2
-```
-
-## Analyze Pipeline
-
-```
-User query → 04-literature-synthesis (LLM-driven)
-```
-
-**REQUIRED SUB-SKILL:** Load `skills/04-literature-synthesis/SKILL.md` — Gate 4: Weighted vault search → three-tier extraction → five-chapter LLM synthesis.
-
-## Prerequisites
+Install only when a required import is unavailable:
 
 ```bash
-pip install -e .              # Core
-pip install -e ".[batch]"     # Batch arXiv import support
+<PYTHON_CMD> -m pip install -e .
+<PYTHON_CMD> -m pip install -e ".[batch]"  # only for batch arXiv import
 ```
 
-Configuration via `OBSIDIAN_VAULT_PATH` env var or `~/.alphaxiv-to-obsidian.json`.
-EasyScholar ranking requires `easyscholar_secret_key` in config (optional).
-Papers saved to `300 Resources/320 References/`. Synthesis to `200 Areas/深度学习/`.
+## Route the Request
 
-## Publication Info Sources
+| Intent or command | Load | Completion condition |
+|---|---|---|
+| `import "<query>"` | Load [Search & Disambiguate](references/search-and-disambiguate.md) first. After selection, load [Build Note](references/build-note.md) and [Validate Import](references/validate-import.md). Load [Backfill Overviews](references/backfill-overviews.md) only if pending remains. | Confirmed papers saved and validated; remaining pending overviews reported |
+| `import hot` / `import recommend` | Same import pipeline with the matching Gate 1 mode | Same as import |
+| `analyze "<topic>"` / `analyze author "<name>"` | [Literature Synthesis](references/literature-synthesis.md) | User-approved synthesis saved |
+| `backfill-overviews` | [Backfill Overviews](references/backfill-overviews.md) | Available overviews fetched; unresolved papers reported without false success |
+| `plan "<direction>"` | [Research Plan](references/research-plan.md) | User-approved, cited plan and index saved |
 
-Multi-source fallback for publication metadata (handled by Gate 2's `note_builder`):
+Route natural-language requests by intent; do not require the literal command syntax.
 
-| Priority | Source | Example |
-|----------|--------|---------|
-| 1 | arXiv API `<journal_ref>` | "Published in NeurIPS 2024" |
-| 2 | arXiv API `<comment>` | "Accepted at ICML 2023 (Oral)" |
-| 3 | Abstract text parsing | "Published as a conference paper at ICLR 2024" |
-| 4 | EasyScholar API | Conference/journal ranking (CCF, CORE, etc.) |
-| 5 | BibTeX fields | `booktitle`, `journal`, `year`, `publisher` |
+## Import Contract
 
-**Frontmatter fields output:**
+Do not read downstream import references before their checkpoint.
 
-| Field | Type | Example |
-|-------|------|---------|
-| `published_venue` | str | `"NeurIPS 2020"`, `"Nature Machine Intelligence 2023"` |
-| `published_date` | str | `"2020-12-06"` — formal pub date (from venue year if arXiv date unavailable) |
-| `presentation_type` | str | `"Oral"`, `"Spotlight"` — detected from arXiv comment |
-| `venue_type` | str | `"conference"`, `"journal"`, `"workshop"` — auto-classified |
-| `ccf`, `sci_jcr`, etc. | str/bool | Ranking from EasyScholar |
+1. Load only Search & Disambiguate. Let Gate 1 create one unique session directory and keep every search round separate.
+2. Show candidates and obtain selection before writing notes. Never overwrite an existing paper without confirmation.
+3. After selection, load Build Note and Validate Import. Run both for every selected paper and resolve all `BLOCK` findings before declaring success.
+4. After validation, run:
 
-**Date resolution priority:** arXiv `<published>` → venue year (e.g. "NeurIPS 2020" → 2020) → BibTeX `year`
-
-**Venue type classification:** Uses known name sets + pattern matching to distinguish conference/journal/workshop. Falls back to BibTeX `booktitle` (→ conference) / `journal` (→ journal) when arXiv has no venue.
-
-`published_venue` and `published_date` are always preferred from higher-priority sources. Missing values degrade gracefully — left empty rather than guessed.
-
-## Note Format
-
-All imported papers follow this canonical structure:
-
-```markdown
-## 摘要
-[paper abstract]
-
----
-### AI 摘要          ← H3, nested under ## 摘要
-[AI summary paragraph]
-
-### 要点             ← H3 bullets
-### 问题
-### 方法
-### 结果
-
----
-## AI 综述 (中文)     ← H2, detailed Chinese overview
-> *由 AlphaXiv 生成*
----
-## 相关引用
+```bash
+<PYTHON_CMD> -m alphaxiv_workflow.backfill --workers 3
+<PYTHON_CMD> -m alphaxiv_workflow.backfill --dry-run
 ```
 
-**Key rules:**
-- `### AI 摘要` is **always H3** — never standalone `## AI 摘要`
-- `---` separates the paper's own abstract from the AI-generated summary sections
-- `build_summary_sections()` always outputs H3 (`###`) headings
-- Backfill fetches **both** ZH and EN overviews; EN summary used as fallback when ZH summary empty
+5. If pending papers remain and authenticated browser automation is available, follow Gate 5. Otherwise preserve `blog_status: pending` and report the limitation.
+6. Finish normalization with:
 
-## Known Pitfalls
+```bash
+<PYTHON_CMD> -m alphaxiv_workflow.fixups add-summaries
+<PYTHON_CMD> -m alphaxiv_workflow.unify --phase 2
+```
 
-Critical issues documented in **[references/known-pitfalls.md](references/known-pitfalls.md)**. Key categories:
-- AlphaXiv API: citations in TWO places (structured field often empty, embedded in markdown), inconsistent `summary_section_titles`
-- Note format corruptions: double headings (`### AI 摘要\n### 摘要`), H2 instead of H3, duplicate 中文综述
-- YAML frontmatter: quote hygiene, inline list handling, quoted `blog_status` detection
-- Playwright: 3-papers-per-batch hard server limit, multi-pattern button detection
-- Script execution order: `python -m alphaxiv_workflow.backfill` → `python -m alphaxiv_workflow.fixups add-summaries` → `python -m alphaxiv_workflow.unify --phase 2`
+## Shared Invariants
 
-## Fallback
+- Keep `### AI 摘要` at H3 under `## 摘要`; keep `## AI 综述 (中文)` and `## 相关引用` at H2.
+- Save paper notes under `300 Resources/320 References/`.
+- Keep generated claims grounded in selected notes and cite them with Obsidian wikilinks.
+- Treat external APIs and browser generation as fallible. Preserve partial state and identify the exact failed stage.
+- Prefer the CLI path. Use a sub-skill's direct Python fallback only when its CLI fails.
+- Keep temporary search state outside the workspace and delete only the exact session directory created for the current import.
 
-If a Python CLI command fails, execute equivalent logic using direct Python API calls. Key imports are documented in each sub-skill's Fallback section.
+## Conditional References
+
+- Read [references/note-schema.md](references/note-schema.md) whenever building, validating, backfilling, or normalizing paper notes.
+- Read [references/known-pitfalls.md](references/known-pitfalls.md) only when debugging or modifying import, note-format, API, YAML, or backfill behavior.
+- Read [references/research-plan-output.md](references/research-plan-output.md) only when Gate 6 reaches drafting, refinement, or saving.

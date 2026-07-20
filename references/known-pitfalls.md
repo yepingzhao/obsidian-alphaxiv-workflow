@@ -2,6 +2,14 @@
 
 Critical issues encountered across this codebase. Read before modifying any pipeline.
 
+## Contents
+
+- [AlphaXiv API](#alphaxiv-api)
+- [Note format](#note-format)
+- [Backfill](#backfill)
+- [YAML frontmatter](#yaml-frontmatter)
+- [Pydantic summary model](#zhsummary-pydantic-model)
+
 ---
 
 ## AlphaXiv API
@@ -19,42 +27,7 @@ Papers with ZH overviews (the common case) may still have EN overviews available
 
 ## Note Format
 
-### Canonical note structure (post-build)
-```markdown
-## 摘要
-[paper abstract]
-
----
-### AI 摘要
-[structured summary paragraph]
-
-### 要点
-- bullet points
-
-### 问题
-- bullet points
-
-### 方法
-- bullet points
-
-### 结果
-- bullet points
-
----
-## AI 综述 (中文)
-> *由 AlphaXiv 生成*
-
-[detailed Chinese overview with demoted headings]
----
-## 相关引用
-[citations]
-```
-
-### Key rules
-1. `### AI 摘要` is **always H3** — nested under `## 摘要`, never standalone H2
-2. `---` separates the paper's own abstract from the AI-generated summary sections
-3. `build_summary_sections()` always outputs H3 headings (`###`)
-4. The first heading from `build_summary_sections()` (the `summary` field) sets the main label
+Use [note-schema.md](note-schema.md) as the canonical structure. Keep this section focused on observed corruptions and recovery behavior.
 
 ### Common post-build corruptions
 | Corruption | Cause | Fix |
@@ -71,9 +44,9 @@ Papers with ZH overviews (the common case) may still have EN overviews available
 
 ### Execution order
 ```
-python -m alphaxiv_workflow.backfill --workers 3
-python -m alphaxiv_workflow.fixups add-summaries
-python -m alphaxiv_workflow.unify --phase 2
+<PYTHON_CMD> -m alphaxiv_workflow.backfill --workers 3
+<PYTHON_CMD> -m alphaxiv_workflow.fixups add-summaries
+<PYTHON_CMD> -m alphaxiv_workflow.unify --phase 2
 ```
 
 ### Double-language fetch
