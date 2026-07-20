@@ -180,14 +180,26 @@ def check_heading_hierarchy(filepath: str) -> dict:
     for l, t in deep:
         result['issues'].append(('warn', f'Heading too deep (H{l}): "{t[:50]}"'))
 
-    # --- Check 4: Required H2 sections (BLOCK — all 4 mandatory) ---
+    # --- Check 4: Required H2 sections (BLOCK — all 3 mandatory H2) ---
     h2_titles = [t for l, t in zip(levels, titles) if l == 2]
-    required_h2 = ['摘要', 'AI 摘要', 'AI 综述 (中文)', '相关引用']
+    required_h2 = ['摘要', 'AI 综述 (中文)', '相关引用']
     for req in required_h2:
         found = any(req == t for t in h2_titles)
         if not found:
             result['issues'].append(('block',
                 f'Missing required H2 section: ## {req}'))
+
+    # --- Check 4b: AI 摘要 must be H3 (nested under ## 摘要 per format spec) ---
+    ai_summary_headings = [(l, t) for l, t in zip(levels, titles)
+                           if 'AI 摘要' in t]
+    if not ai_summary_headings:
+        result['issues'].append(('block',
+            'Missing required H3 section: ### AI 摘要'))
+    else:
+        for l, t in ai_summary_headings:
+            if l != 3:
+                result['issues'].append(('block',
+                    f'"AI 摘要" must be H3, but is H{l}: "{t[:50]}"'))
 
     # --- Check 5: 相关引用 must be H2 ---
     citation_headings = [(l, t) for l, t in zip(levels, titles)
@@ -307,4 +319,4 @@ if __name__ == '__main__':
         tags = fm.get('tags', [])
         print(f'  Current tags ({len(tags)}): {tags}')
         if args.generate_tags:
-            print('  Tag generation requires LLM analysis — run via Claude inline')
+            print('  Tag generation requires LLM analysis — use the current model')

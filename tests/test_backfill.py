@@ -269,8 +269,9 @@ class TestUpdateNote:
         # The ## 摘要 section before AI should still exist
         assert '## 摘要' in content
         assert 'abstract content' in content
-        # The ## AI 摘要 section should still exist
-        assert '## AI 摘要' in content
+        # The AI 摘要 section should be preserved and normalized to canonical H3.
+        assert '\n### AI 摘要\n' in content
+        assert '\n## AI 摘要\n' not in content
 
     def test_no_footer_boundary_safe(self, tmp_path):
         """When note has no ---\\n*Fetched footer, replacement still works safely."""

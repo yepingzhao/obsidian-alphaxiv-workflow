@@ -301,7 +301,8 @@ class TestBuildNote:
         assert 'Attention Is All You Need' in content
         assert 'arxiv_id: "1706.03762"' in content
         assert '## 摘要' in content
-        assert '## AI 摘要' in content
+        assert '\n### AI 摘要\n' in content
+        assert '\n## AI 摘要\n' not in content
         assert '## AI 综述 (中文)' in content
         assert '## 相关引用' in content
         assert '*Fetched from [AlphaXiv]' in content

@@ -78,7 +78,7 @@ def find_notes_by_topic(topic: str, vault_path: str) -> list:
     scored = []
     for p in all_papers:
         title_lower = p['title'].lower()
-        tags_lower = [t.lower() for t in p['tags']]
+        tags_lower = [(t.lower() if isinstance(t, str) else str(t)) for t in p['tags']]
 
         for kw in keywords:
             if kw in title_lower:
@@ -224,7 +224,7 @@ def _format_paper_entry(p: dict, index: int) -> str:
 def build_synthesis_prompt(topic: str, papers: list, dimension: str) -> str:
     """Build the LLM prompt for five-chapter literature synthesis.
 
-    Returns the complete prompt string ready for Claude.
+    Return the complete prompt string ready for the current model.
     """
     is_author = dimension == 'author'
 
@@ -280,7 +280,7 @@ def build_synthesis_note(topic: str, papers: list, dimension: str, vault_path: s
     """Build a literature synthesis note scaffold with LLM placeholder.
 
     Returns (content, filepath). The actual five-chapter synthesis is generated
-    by Claude inline using the prompt from build_synthesis_prompt().
+    by the current model using the prompt from build_synthesis_prompt().
     """
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
     date_str = datetime.now().strftime('%Y-%m-%d')
@@ -411,4 +411,4 @@ if __name__ == '__main__':
     if not papers:
         print('No papers found. Try a different query or check vault path.')
     else:
-        print(f'\nTo generate synthesis: run Claude inline with the prompt from build_synthesis_prompt()')
+        print('\nTo generate synthesis: pass the prompt from build_synthesis_prompt() to the current model')

@@ -397,10 +397,6 @@ def main():
         '--exclude',
         help='JSON file with {arxiv_id: true} map of papers to exclude (from previous rounds)'
     )
-    parser.add_argument(
-        '--exclude',
-        help='JSON file with {arxiv_id: true} map of papers to exclude (from previous rounds)'
-    )
     args = parser.parse_args()
 
     # Load exclude map

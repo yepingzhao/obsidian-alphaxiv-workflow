@@ -115,7 +115,7 @@ blog_status: pending
 ## 摘要
 {abstract}
 
-## AI 摘要
+### AI 摘要
 *暂无 AI 摘要数据*
 
 ## AI 综述 (中文)

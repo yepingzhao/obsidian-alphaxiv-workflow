@@ -42,7 +42,7 @@ The dominant sequence transduction models...
 
 ---
 
-## AI 摘要
+### AI 摘要
 
 Key insights from the paper...
 
@@ -204,6 +204,13 @@ class TestCheckHeadingHierarchy:
         write_note(fpath)
         result = check_heading_hierarchy(fpath)
         assert result['status'] == 'pass'
+
+    def test_blocks_ai_summary_at_h2(self, tmp_path):
+        fpath = os.path.join(str(tmp_path), 'test.md')
+        write_note(fpath, SAMPLE_NOTE.replace('### AI 摘要', '## AI 摘要'))
+        result = check_heading_hierarchy(fpath)
+        assert any('must be H3' in issue[1]
+                   for issue in result['issues'] if issue[0] == 'block')
 
     def test_blocks_no_h1(self, tmp_path):
         fpath = os.path.join(str(tmp_path), 'test.md')

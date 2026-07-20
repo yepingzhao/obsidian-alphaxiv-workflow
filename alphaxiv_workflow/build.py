@@ -55,23 +55,26 @@ def main():
     try:
         version_id = meta.version_id
     except AttributeError:
-        print("Error: Metadata has no version ID. The paper may not have been indexed yet.")
-        sys.exit(1)
+        print("  [warn] Metadata has no version ID — overviews unavailable.")
+        version_id = None
 
-    try:
-        print("Fetching Chinese overview...")
-        zh_overview = get_overview(version_id, "zh")
-    except Exception as e:
-        print(f"Error: Failed to fetch Chinese overview: {e}")
-        print("AlphaXiv overviews are generated asynchronously — try again later.")
-        sys.exit(1)
+    # Fetch Chinese overview
+    zh_overview = None
+    if version_id:
+        try:
+            print("Fetching Chinese overview...")
+            zh_overview = get_overview(version_id, "zh")
+        except Exception as e:
+            print(f"  [warn] blog_pending: Chinese overview not available ({e})")
+            print("  AlphaXiv overviews are generated asynchronously — continuing without overview.")
 
     # Fetch English overview as fallback (non-blocking)
     en_overview = None
-    try:
-        en_overview = get_overview(version_id, "en")
-    except Exception:
-        pass
+    if version_id:
+        try:
+            en_overview = get_overview(version_id, "en")
+        except Exception:
+            pass
 
     # Fetch publication info from arXiv API (non-blocking)
     pub_info = None

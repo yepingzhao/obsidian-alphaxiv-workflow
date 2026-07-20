@@ -1,7 +1,7 @@
 """
-Unify YAML frontmatter and H2 headings across all paper notes.
+Unify YAML frontmatter and canonical headings across all paper notes.
 Phase 1: Fetch missing version IDs from AlphaXiv API
-Phase 2: Normalize frontmatter field order + H2 structure
+Phase 2: Normalize frontmatter field order + heading structure
 """
 import os, re, time
 from collections import OrderedDict
@@ -120,12 +120,19 @@ def normalize_note(fp):
     new_fm = '\n'.join(fm_lines)
     if new_fm != fm_text: changed = True
 
-    # ── H2 ordering: ensure ## AI 摘要 is before ## AI 综述 (中文) ──
+    # ── Heading normalization and ordering ──
+    normalized_body = re.sub(r'(?m)^## AI 摘要\s*$', '### AI 摘要', body)
+    if normalized_body != body:
+        body = normalized_body
+        changed = True
+
+    # Ensure ### AI 摘要 is before ## AI 综述 (中文).
     # These are distinct sections: AI 摘要 = structured summary, AI 综述 = narrative overview.
     # They must NOT be merged. Only reorder if AI 摘要 appears after AI 综述.
-    if '## AI 摘要' in body and '## AI 综述 (中文)' in body:
-        ai_summary = re.search(r'\n## AI 摘要\n.*?(?=\n## |\Z)', body, re.DOTALL)
-        ai_review = re.search(r'\n## AI 综述 \(中文\).*?(?=\n## |\Z)', body, re.DOTALL)
+    if '### AI 摘要' in body and '## AI 综述 (中文)' in body:
+        ai_summary = re.search(r'\n### AI 摘要\n.*?(?=\n---|\n## |\Z)', body, re.DOTALL)
+        ai_review = re.search(
+            r'\n## AI 综述 \(中文\).*?(?=\n---|\n## |\Z)', body, re.DOTALL)
         if ai_summary and ai_review and ai_summary.start() > ai_review.start():
             # AI 摘要 is AFTER AI 综述 — swap them
             summary_text = ai_summary.group()

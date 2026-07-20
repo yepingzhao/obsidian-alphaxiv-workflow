@@ -67,7 +67,7 @@ def _resolve_papers_dir(vault_path):
 # ── Public functions ──
 
 def add_missing_sections(vault_path: str = None):
-    """Add missing ## AI 摘要 and ## 相关引用 sections from AlphaXiv API."""
+    """Add missing ### AI 摘要 and ## 相关引用 sections from AlphaXiv API."""
     papers = _resolve_papers_dir(vault_path)
     results = []
     for f in sorted(os.listdir(papers)):
@@ -75,9 +75,8 @@ def add_missing_sections(vault_path: str = None):
         fp = os.path.join(papers, f)
         with open(fp, 'r', encoding='utf-8') as fh:
             content = fh.read()
-        has_ai_summary = ('## AI 摘要\n' in content or
-                          '### 摘要\n' in content or
-                          '### 核心总结\n' in content)
+        has_ai_summary = bool(re.search(
+            r'^#{2,3}\s+(?:AI 摘要|摘要|核心总结)\s*$', content, re.MULTILINE))
         needs_summary = not has_ai_summary
         needs_cit = '## 相关引用\n' not in content
         if not needs_summary and not needs_cit: continue
@@ -120,7 +119,7 @@ def add_missing_sections(vault_path: str = None):
                 ins = content.find('\n---\n', content.find('## 摘要'))
                 if ins > 0:
                     end = ins + 5
-                    sec = f'\n## AI 摘要\n\n{ai}\n' if ai else '\n## AI 摘要\n\n*暂无 AI 摘要数据*\n'
+                    sec = f'\n### AI 摘要\n\n{ai}\n' if ai else '\n### AI 摘要\n\n*暂无 AI 摘要数据*\n'
                     content = content[:end] + sec + '\n---\n' + content[end:]
                     if ai: ai_ok += 1
                     else: ai_pl += 1
